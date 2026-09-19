@@ -10,17 +10,27 @@
 #
 # Two jobs, in order:
 #   1. Worktree budget: refuse the push while this repo holds more than the
-#      allowed number of *drainable* worktrees. Enforces CLAUDE.md's "A
+#      allowed number of *open* worktrees. Enforces CLAUDE.md's "A
 #      dangling worktree is illegal". Drain the debt, don't bypass the gate.
 #   2. Chain to repo-local .githooks/pre-push / hooks/pre-push if present,
 #      so per-repo hooks keep working alongside the global one.
 #
-# What counts as drainable is not decided here. The auditing-worktrees skill
-# already owns that classification (merged, clean, not in flight, no live
-# lock), so this hook shells out to its bin/audit-worktrees.sh and counts
-# only the entries it files under safe-to-clean. One source of truth, at the
-# cost of the gate going quiet on a machine where the skill isn't installed:
-# a missing auditor means the push proceeds, never that it is refused.
+# What counts as debt is not decided here. The auditing-worktrees skill
+# already owns the classification (merged, clean, in flight, live lock), so
+# this hook shells out to its bin/audit-worktrees.sh and counts the worktrees
+# it files under safe-to-clean *and* under needs-triage. One source of truth,
+# at the cost of the gate going quiet on a machine where the skill isn't
+# installed: a missing auditor means the push proceeds, never that it is
+# refused.
+#
+# Both buckets count because both are the same claim. A worktree on disk says
+# work is live in that directory, and an unmerged branch parked behind an open
+# PR makes that claim just as falsely as a merged one does. Counting only
+# safe-to-clean measured the debt already easy to pay and ignored the debt that
+# actually accumulates: measured on ~/.claude 2026-09-19, eight worktrees, every
+# one of them backed by an open PR, none classified safe-to-clean, cap never
+# fired. The auditor hides worktrees active within the last two hours, and that
+# is what keeps genuinely live work out of the count.
 #
 # Cap resolution (flag/env/config triplet, highest precedence first):
 #   GIT_MAX_WORKTREES=<n>          env var
@@ -68,7 +78,7 @@ check_worktree_budget() {
   [ -n "$auditor" ] || auditor="$DEFAULT_AUDIT_BIN"
 
   # No auditor, no opinion. The classification lives in auditing-worktrees;
-  # without it this hook has no defensible definition of "drainable" and
+  # without it this hook has no defensible definition of "idle" and
   # guessing one (every registered worktree, say) refuses pushes over work
   # that is genuinely live. Fail open and say why, once.
   if [ ! -f "$auditor" ]; then
@@ -83,9 +93,10 @@ check_worktree_budget() {
   report="$(bash "$auditor" --no-content "$primary" 2>/dev/null || true)"
 
   # audit-worktrees.sh prints prose, bucketed by heading. Take the lines under
-  # safe-to-clean, and only those carrying a "(worktree: <path>)" annotation:
-  # the bucket also holds merged branches with no worktree at all, which cost
-  # no directory and are not what this cap is about.
+  # safe-to-clean and needs-triage, and only those carrying a
+  # "(worktree: <path>)" annotation: both buckets also hold branches with no
+  # worktree at all, which cost no directory and are not what this cap is
+  # about.
   local -a idle=()
   local wt pruned=0
   while IFS= read -r wt; do
@@ -100,6 +111,7 @@ check_worktree_budget() {
     idle+=("$wt")
   done < <(printf '%s\n' "$report" | awk '
     /^  safe-to-clean/       { in_bucket = 1; next }
+    /^  needs-triage/        { in_bucket = 1; next }
     /^  [a-z(]/              { in_bucket = 0 }
     in_bucket && /\(worktree: / {
       i = index($0, "(worktree: ")
@@ -120,12 +132,15 @@ check_worktree_budget() {
     echo "pre-push: worktree budget exceeded"
     echo ""
     echo "  repo:      $primary"
-    echo "  drainable: $count worktrees (cap $max) -- merged, clean, and idle"
-    echo "             per auditing-worktrees, excluding the primary checkout"
-    echo "             and the one you are pushing from"
+    echo "  open:      $count worktrees (cap $max): every idle worktree the"
+    echo "             auditor sees, merged or not, excluding the primary"
+    echo "             checkout, the one you are pushing from, and anything"
+    echo "             touched in the last two hours"
     echo ""
-    echo "A worktree on disk claims work is live there. Finished branches must"
-    echo "give their directory back. Drain these before pushing more:"
+    echo "A worktree on disk claims work is live there. A branch parked behind"
+    echo "an open PR makes that claim as falsely as a merged one does, and the"
+    echo "branch is the work, not the directory: git worktree add rebuilds it in"
+    echo "a second if review feedback arrives. Drain these before pushing more:"
     echo ""
     for wt in "${idle[@]}"; do
       local br landed
