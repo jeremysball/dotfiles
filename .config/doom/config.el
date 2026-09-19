@@ -97,3 +97,4 @@
 ;; Don't truncate which-key descriptions with ellipses. Default is 27 chars,
 ;; which cuts off most entries. Set high so full descriptions show.
 (setq which-key-max-description-length 100)
+(set-face-attribute 'default nil :family "MonoLisa" :size 20)
