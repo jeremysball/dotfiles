@@ -21,6 +21,6 @@
 	# setup. Git expands ~/ in config path values. The pre-commit runs the
 	# adhd-theme guardrail in the dotfiles repo and the dash gate, which
 	# blocks em and en dashes plus double-hyphen stand-ins; the pre-push
-	# enforces the drainable-worktree budget (cap via worktree.maxOpen or
+	# enforces the open-worktree budget (cap via worktree.maxOpen or
 	# GIT_MAX_WORKTREES, classifier via worktree.auditBin).
 	hooksPath = ~/.config/git/hooks

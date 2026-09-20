@@ -298,7 +298,7 @@ experimental = true
 # here so every machine that runs `mise bootstrap dotfiles apply` gets the
 # pre-commit (adhd-theme guardrail + dash gate: em and en dashes plus
 # double-hyphen stand-ins), the commit-msg (AI-credit refusal + Conventional
-# Commits subject), and the pre-push (drainable-worktree budget)
+# Commits subject), and the pre-push (open-worktree budget)
 # with zero manual setup.
 "~/.config/git/hooks/pre-commit" = {}
 "~/.config/git/hooks/commit-msg" = {}
