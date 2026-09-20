@@ -22,11 +22,11 @@
 //   are no-op identifiers (reasoning is force-disabled on the model to
 //   sidestep a parser bug), kept so `/model glm-5.2:max` still resolves.
 //
-// Dead providers (retired 2026-08-30 per Sir): alibaba-tknplan (token plan
-// lapsed — "Access to model denied" on every dispatch), opencode-go
-// (subscription lapsed), minimax (quota exhausted). Their blocks below are
-// commented out, not deleted, so the config shape survives for a future
-// re-enable. Do not dispatch to them.
+// Provider liveness lives in provider-status.yml, one boolean per
+// provider. It is the only record of which providers are dispatchable;
+// do not restate it here. Some blocks below are commented out so their
+// config shape survives a re-enable, which says nothing about whether
+// the provider is currently live.
 
 {
   "$schema": "https://opencode.ai/config.json",
@@ -57,8 +57,8 @@
   },
 
   // Default model: ollama/deepseek-v4-flash:0731 (Ollama Cloud, plan-included,
-  // confirmed live via a real PONG 2026-08-07). Replaced opencode-go/minimax-m3
-  // on 2026-08-30 when opencode-go and minimax were declared dead.
+  // confirmed live via a real PONG 2026-08-07). Replaced
+  // opencode-go/minimax-m3 on 2026-08-30.
   //   auth: {env:OLLAMA_CLOUD_API_KEY}
   //   base: https://ollama.com/v1
   "model": "ollama/deepseek-v4-flash:0731",
@@ -94,7 +94,7 @@
     "summarizer": {
       // Switch into this agent with:  /agent summarizer
       // Model: cheapestinference/kimi-k2.6 (was cheapestinference/minimax-m3
-      // until minimax was declared dead 2026-08-30). Optimized for long-context
+      // until 2026-08-30). Optimized for long-context
       // summarization — quote source when condensing, preserve named entities
       // and numbers exactly, output structured prose (intro / body / closing).
       "description": "Summarization agent running on cheapestinference/kimi-k2.6.",
@@ -256,7 +256,6 @@
         }
         // "minimax-m3": {
         //   // From models.dev: minimax/MiniMax-M3 — toggle only.
-        //   // DEAD 2026-08-30: minimax declared dead (quota exhausted).
         //   "name": "MiniMax M3",
         //   "reasoning": true,
         //   "tool_call": true,
@@ -265,9 +264,8 @@
       }
     },
 
-    // DEAD 2026-08-30: alibaba token plan lapsed — "Access to model denied"
-    // on every dispatch (task oc_mtfxgej4_a29b5fd1). Block commented out,
-    // not deleted, so the config shape survives for a future re-enable.
+    // Block commented out, not deleted, so the config shape survives a
+    // re-enable. See provider-status.yml for whether it is dispatchable.
 //     "alibaba-tknplan": {
 //       // Alibaba Cloud Model Studio "Token Plan" subscription (SG endpoint,
 //       // verified live 2026-07-29 via curl → 200 OK on
@@ -509,8 +507,8 @@
     // compaction. Model list mirrors ~/.pi/agent/settings.json's
     // `providers.*.modelOverrides` (pi's equivalent fleet cap) — keep the
     // two in sync when the actively-dispatched fleet changes.
-    // 2026-08-30: minimax and opencode-go blocks commented out below (both
-    // declared dead); their shapes survive for a future re-enable.
+    // The minimax and opencode-go blocks below are commented out; their
+    // shapes survive for a future re-enable.
     // "minimax": {
     //   "models": {
     //     "MiniMax-M2.7": { "limit": { "context": 200000, "output": 131072 } },
@@ -587,10 +585,6 @@
       }
     },
     "openai": {
-      // DEAD sub 2026-08-22: OpenAI Codex subscription lapsed; confirmed
-      // pi_payment_required on openai-codex/gpt-5.6-luna via opencode and
-      // pi. Keep block for config shape but do not dispatch; verify script
-      // treats openai/openai-codex as dead and does not require parity.
       "models": {
         "gpt-5.6-luna": { "limit": { "context": 200000, "output": 128000 } },
         "gpt-5.6-terra": { "limit": { "context": 200000, "output": 128000 } }
