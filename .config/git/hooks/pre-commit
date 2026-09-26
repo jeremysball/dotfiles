@@ -21,9 +21,17 @@
 #      checkout. Every change belongs in a linked worktree, so the primary
 #      stays a stable merge base for concurrent workers.
 #      Override once: git commit --no-verify  or  SKIP_PRIMARY_CHECK=1 git commit.
+#      Opt a repo out for good (env/config pair, highest precedence first):
+#        GIT_REQUIRE_LINKED_WORKTREE=0    env var
+#        git config worktree.requireLinked false   config key, repo scope only
+#        DEFAULT_REQUIRE_LINKED           built-in default, below
+#      The config key is read with --local on purpose. A --global value is
+#      ignored, so one stray command cannot disarm the gate machine-wide.
 #   5. Chain to repo-local .githooks/pre-commit / hooks/pre-commit if present,
 #      so per-repo hooks keep working alongside the global one.
 set -euo pipefail
+
+DEFAULT_REQUIRE_LINKED=true
 
 # --- 1. dash gate ---
 # The em dash is only the most obvious form. The same prose shape arrives as an
@@ -72,7 +80,12 @@ else
     | LC_ALL=C grep -v '^+++ ' \
     | sed -e 's/^+//' -e "s/$nbsp/ /g" -e "s/$nnbsp/ /g" -e "s/$figsp/ /g" || true)"
 
-  if printf '%s\n' "$added" | LC_ALL=C grep -Eq "$dash_re"; then
+  # A herestring, not `printf | grep -q`. grep -q exits on the first match,
+  # printf then dies of SIGPIPE, and pipefail promotes that 141 to the
+  # pipeline's status, which the `if` reads as "no match". The gate silently
+  # stopped firing on exactly the diffs most likely to carry a stray dash:
+  # measured, a 2.4MB input with an em dash on line 1 reported no match.
+  if LC_ALL=C grep -Eq "$dash_re" <<<"$added"; then
     echo "pre-commit: dash blocked. Staged changes contain an em/en dash or a double-hyphen stand-in." >&2
     echo "" >&2
     echo "Fix it, then stage again:" >&2
@@ -82,7 +95,7 @@ else
     printf '  LC_ALL=C sed -E "s/%s/ /g; s/%s/ /g; s/%s/ /g; s/ *[%s%s%s] */, /g; s/[[:space:]]--[[:space:]]/, /g; s/([[:alnum:]])--([[:alnum:]])/\\1, \\2/g"\n' \
       "$nbsp" "$nnbsp" "$figsp" "$em_dash" "$en_dash" "$bar_dash" >&2
     echo "" >&2
-    printf '%s\n' "$added" | LC_ALL=C grep -E "$dash_re" | head -n 20 | sed 's/^/  /' >&2 || true
+    LC_ALL=C grep -E "$dash_re" <<<"$added" | head -n 20 | sed 's/^/  /' >&2 || true
     echo "" >&2
     echo "Replace it with a comma, period, or colon. Keep related words together." >&2
     echo "" >&2
@@ -123,12 +136,59 @@ fi
 # `git rev-parse --show-toplevel` against the first `git worktree list`
 # entry (the primary). Fail open outside a work tree: an empty lookup is a
 # skip, never a block.
-if [ -z "${SKIP_PRIMARY_CHECK:-}" ]; then
+#
+# Some repos are not worktree-shaped at all: a tool owns the repo and shells
+# out to `git commit` in the one checkout it knows about (pass, a generated
+# state repo, an upstream vendor tree). There, "use a worktree" is not advice
+# anyone can follow, and the alternative is bypassing on every single commit
+# until the bypass is reflex and the gate protects nothing. Such a repo
+# declares itself exempt once, by name, instead. Deliberately an explicit
+# opt-out and not inferred: a repo with no linked worktrees today is the
+# normal case the gate exists for, not evidence the gate does not apply.
+# git accepts False, NO, and OFF as readily as false, no, and off, so a
+# case-sensitive match would silently ignore a config value git itself
+# considers a valid boolean and leave the gate on.
+is_off() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    false | 0 | no | off) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Reads SKIP_PRIMARY_CHECK as a boolean rather than "set to anything at all",
+# matching the dash gate above and SKIP_WORKTREE_BUDGET in pre-push. The old
+# emptiness test meant SKIP_PRIMARY_CHECK=0, which plainly reads as "do not
+# skip", turned the gate off.
+if is_off "${SKIP_PRIMARY_CHECK:-0}"; then
   commit_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  commit_primary="$(git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}' || true)"
+  # substr($0,10) rather than $2, matching pre-push. awk's $2 stops at the
+  # first space, so a repo under a path containing one (/tmp/my repo) yielded
+  # a truncated /tmp/my, never matched --show-toplevel, and the gate silently
+  # never fired there.
+  commit_primary="$(git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print substr($0,10); exit}' || true)"
   if [ -n "$commit_top" ] && [ -n "$commit_primary" ] && [ "$commit_top" = "$commit_primary" ]; then
+    # Consulted only once a commit is already known to be on the primary, so
+    # the extra fork stays off the path every ordinary worktree commit takes.
+    # --local, not a plain --get: --get merges system, global, and repo scope,
+    # so a single stray `git config --global worktree.requireLinked false`
+    # would disable this gate in every repo on the machine. The exemption is
+    # per repo by design, so only the repo's own config can grant it.
+    require_linked="${GIT_REQUIRE_LINKED_WORKTREE:-$(git config --local --get worktree.requireLinked 2>/dev/null || true)}"
+  fi
+  # Not `exit 0` on the exempt path: section 5 still has to chain to the
+  # repo-local hook, which an early exit here would silently skip.
+  if [ -n "$commit_top" ] && [ -n "$commit_primary" ] \
+    && [ "$commit_top" = "$commit_primary" ] \
+    && ! is_off "${require_linked:-$DEFAULT_REQUIRE_LINKED}"; then
     echo "pre-commit: blocked. Committing from the primary checkout ($commit_primary)." >&2
-    echo "pre-commit: make the change in a linked worktree instead (bypass once: git commit --no-verify or SKIP_PRIMARY_CHECK=1 git commit)." >&2
+    echo "pre-commit: make the change in a linked worktree instead." >&2
+    echo "" >&2
+    echo "Bypass once:" >&2
+    echo "  git commit --no-verify" >&2
+    echo "  SKIP_PRIMARY_CHECK=1 git commit" >&2
+    echo "" >&2
+    echo "Exempt this repo for good, when a tool owns it and commits here by design:" >&2
+    echo "  git config worktree.requireLinked false" >&2
     exit 1
   fi
 fi
