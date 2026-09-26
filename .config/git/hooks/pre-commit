@@ -21,9 +21,15 @@
 #      checkout. Every change belongs in a linked worktree, so the primary
 #      stays a stable merge base for concurrent workers.
 #      Override once: git commit --no-verify  or  SKIP_PRIMARY_CHECK=1 git commit.
+#      Opt a repo out for good (env/config pair, highest precedence first):
+#        GIT_REQUIRE_LINKED_WORKTREE=0    env var
+#        git config worktree.requireLinked false   config key
+#        DEFAULT_REQUIRE_LINKED           built-in default, below
 #   5. Chain to repo-local .githooks/pre-commit / hooks/pre-commit if present,
 #      so per-repo hooks keep working alongside the global one.
 set -euo pipefail
+
+DEFAULT_REQUIRE_LINKED=true
 
 # --- 1. dash gate ---
 # The em dash is only the most obvious form. The same prose shape arrives as an
@@ -128,12 +134,35 @@ fi
 # `git rev-parse --show-toplevel` against the first `git worktree list`
 # entry (the primary). Fail open outside a work tree: an empty lookup is a
 # skip, never a block.
-if [ -z "${SKIP_PRIMARY_CHECK:-}" ]; then
+#
+# Some repos are not worktree-shaped at all: a tool owns the repo and shells
+# out to `git commit` in the one checkout it knows about (pass, a generated
+# state repo, an upstream vendor tree). There, "use a worktree" is not advice
+# anyone can follow, and the alternative is bypassing on every single commit
+# until the bypass is reflex and the gate protects nothing. Such a repo
+# declares itself exempt once, by name, instead. Deliberately an explicit
+# opt-out and not inferred: a repo with no linked worktrees today is the
+# normal case the gate exists for, not evidence the gate does not apply.
+require_linked="${GIT_REQUIRE_LINKED_WORKTREE:-$(git config --get worktree.requireLinked 2>/dev/null || true)}"
+require_linked="${require_linked:-$DEFAULT_REQUIRE_LINKED}"
+case "$require_linked" in
+  false | 0 | no | off) require_linked=false ;;
+  *) require_linked=true ;;
+esac
+
+if [ -z "${SKIP_PRIMARY_CHECK:-}" ] && [ "$require_linked" = true ]; then
   commit_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   commit_primary="$(git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}' || true)"
   if [ -n "$commit_top" ] && [ -n "$commit_primary" ] && [ "$commit_top" = "$commit_primary" ]; then
     echo "pre-commit: blocked. Committing from the primary checkout ($commit_primary)." >&2
-    echo "pre-commit: make the change in a linked worktree instead (bypass once: git commit --no-verify or SKIP_PRIMARY_CHECK=1 git commit)." >&2
+    echo "pre-commit: make the change in a linked worktree instead." >&2
+    echo "" >&2
+    echo "Bypass once:" >&2
+    echo "  git commit --no-verify" >&2
+    echo "  SKIP_PRIMARY_CHECK=1 git commit" >&2
+    echo "" >&2
+    echo "Exempt this repo for good, when a tool owns it and commits here by design:" >&2
+    echo "  git config worktree.requireLinked false" >&2
     exit 1
   fi
 fi
