@@ -26,3 +26,11 @@ exists to catch.
 workflow carries the config key, or if the key is ever set globally rather than
 per repo. Check with `git config --get worktree.requireLinked` in the repo, and
 `git config --global --get worktree.requireLinked`, which should be empty.
+
+### The exemption does not survive a fresh clone
+
+`git config worktree.requireLinked false` writes to `.git/config`, which git
+never tracks, so a re-clone of an exempt repo comes back with the gate on.
+That is the same property every repo-local git setting has, not a bug in this
+hook. Re-run the one command after cloning. It would only become a real bug if
+the hook started reading the key from a tracked file and still lost it.

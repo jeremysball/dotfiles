@@ -23,8 +23,10 @@
 #      Override once: git commit --no-verify  or  SKIP_PRIMARY_CHECK=1 git commit.
 #      Opt a repo out for good (env/config pair, highest precedence first):
 #        GIT_REQUIRE_LINKED_WORKTREE=0    env var
-#        git config worktree.requireLinked false   config key
+#        git config worktree.requireLinked false   config key, repo scope only
 #        DEFAULT_REQUIRE_LINKED           built-in default, below
+#      The config key is read with --local on purpose. A --global value is
+#      ignored, so one stray command cannot disarm the gate machine-wide.
 #   5. Chain to repo-local .githooks/pre-commit / hooks/pre-commit if present,
 #      so per-repo hooks keep working alongside the global one.
 set -euo pipefail
@@ -143,17 +145,41 @@ fi
 # declares itself exempt once, by name, instead. Deliberately an explicit
 # opt-out and not inferred: a repo with no linked worktrees today is the
 # normal case the gate exists for, not evidence the gate does not apply.
-require_linked="${GIT_REQUIRE_LINKED_WORKTREE:-$(git config --get worktree.requireLinked 2>/dev/null || true)}"
-require_linked="${require_linked:-$DEFAULT_REQUIRE_LINKED}"
-case "$require_linked" in
-  false | 0 | no | off) require_linked=false ;;
-  *) require_linked=true ;;
-esac
+# git accepts False, NO, and OFF as readily as false, no, and off, so a
+# case-sensitive match would silently ignore a config value git itself
+# considers a valid boolean and leave the gate on.
+is_off() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    false | 0 | no | off) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
-if [ -z "${SKIP_PRIMARY_CHECK:-}" ] && [ "$require_linked" = true ]; then
+# Reads SKIP_PRIMARY_CHECK as a boolean rather than "set to anything at all",
+# matching the dash gate above and SKIP_WORKTREE_BUDGET in pre-push. The old
+# emptiness test meant SKIP_PRIMARY_CHECK=0, which plainly reads as "do not
+# skip", turned the gate off.
+if is_off "${SKIP_PRIMARY_CHECK:-0}"; then
   commit_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  commit_primary="$(git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}' || true)"
+  # substr($0,10) rather than $2, matching pre-push. awk's $2 stops at the
+  # first space, so a repo under a path containing one (/tmp/my repo) yielded
+  # a truncated /tmp/my, never matched --show-toplevel, and the gate silently
+  # never fired there.
+  commit_primary="$(git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print substr($0,10); exit}' || true)"
   if [ -n "$commit_top" ] && [ -n "$commit_primary" ] && [ "$commit_top" = "$commit_primary" ]; then
+    # Consulted only once a commit is already known to be on the primary, so
+    # the extra fork stays off the path every ordinary worktree commit takes.
+    # --local, not a plain --get: --get merges system, global, and repo scope,
+    # so a single stray `git config --global worktree.requireLinked false`
+    # would disable this gate in every repo on the machine. The exemption is
+    # per repo by design, so only the repo's own config can grant it.
+    require_linked="${GIT_REQUIRE_LINKED_WORKTREE:-$(git config --local --get worktree.requireLinked 2>/dev/null || true)}"
+  fi
+  # Not `exit 0` on the exempt path: section 5 still has to chain to the
+  # repo-local hook, which an early exit here would silently skip.
+  if [ -n "$commit_top" ] && [ -n "$commit_primary" ] \
+    && [ "$commit_top" = "$commit_primary" ] \
+    && ! is_off "${require_linked:-$DEFAULT_REQUIRE_LINKED}"; then
     echo "pre-commit: blocked. Committing from the primary checkout ($commit_primary)." >&2
     echo "pre-commit: make the change in a linked worktree instead." >&2
     echo "" >&2
