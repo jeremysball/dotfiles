@@ -72,7 +72,12 @@ else
     | LC_ALL=C grep -v '^+++ ' \
     | sed -e 's/^+//' -e "s/$nbsp/ /g" -e "s/$nnbsp/ /g" -e "s/$figsp/ /g" || true)"
 
-  if printf '%s\n' "$added" | LC_ALL=C grep -Eq "$dash_re"; then
+  # A herestring, not `printf | grep -q`. grep -q exits on the first match,
+  # printf then dies of SIGPIPE, and pipefail promotes that 141 to the
+  # pipeline's status, which the `if` reads as "no match". The gate silently
+  # stopped firing on exactly the diffs most likely to carry a stray dash:
+  # measured, a 2.4MB input with an em dash on line 1 reported no match.
+  if LC_ALL=C grep -Eq "$dash_re" <<<"$added"; then
     echo "pre-commit: dash blocked. Staged changes contain an em/en dash or a double-hyphen stand-in." >&2
     echo "" >&2
     echo "Fix it, then stage again:" >&2
@@ -82,7 +87,7 @@ else
     printf '  LC_ALL=C sed -E "s/%s/ /g; s/%s/ /g; s/%s/ /g; s/ *[%s%s%s] */, /g; s/[[:space:]]--[[:space:]]/, /g; s/([[:alnum:]])--([[:alnum:]])/\\1, \\2/g"\n' \
       "$nbsp" "$nnbsp" "$figsp" "$em_dash" "$en_dash" "$bar_dash" >&2
     echo "" >&2
-    printf '%s\n' "$added" | LC_ALL=C grep -E "$dash_re" | head -n 20 | sed 's/^/  /' >&2 || true
+    LC_ALL=C grep -E "$dash_re" <<<"$added" | head -n 20 | sed 's/^/  /' >&2 || true
     echo "" >&2
     echo "Replace it with a comma, period, or colon. Keep related words together." >&2
     echo "" >&2
