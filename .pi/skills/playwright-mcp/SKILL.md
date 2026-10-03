@@ -11,7 +11,7 @@ Browser automation using Playwright MCP server via `mcporter`.
 
 ```bash
 # 1. Install chromium (the server runs through npx, nothing global to install)
-mise-sys install-chromium
+mise -C ~/.dotfiles/mise-en-system run install-chromium   # fish: mise-sys install-chromium
 
 # 2. Configure ~/.config/mcporter/config.json (dotfiles tracks this file)
 {

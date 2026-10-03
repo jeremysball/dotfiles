@@ -54,7 +54,7 @@ else
     echo "   Try running: mcporter list"
     echo ""
     echo "   The server runs through npx, so there is nothing to install"
-    echo "   globally. Chromium comes from pacman: mise-sys install-chromium"
+    echo "   globally. Chromium: mise -C ~/.dotfiles/mise-en-system run install-chromium"
 fi
 
 echo ""
