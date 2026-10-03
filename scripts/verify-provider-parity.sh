@@ -141,17 +141,29 @@ normalize() { tr '[:upper:]' '[:lower:]' ; }
 # excluded from the comparison rather than counted as drift. Canonical names
 # use the spelled-out "token" unless a built-in id already claims it.
 PROVIDER_SPECS=(
-  # xiaomi-token-plan keeps the spelled-out form; alibaba-tknplan is retired
-  # (dead 2026-08-30) and lives in DEAD_PROVIDERS, not here.
+  # xiaomi-token-plan keeps the spelled-out form.
   "xiaomi-token-plan|xiaomi-token-plan|xiaomi-token-plan|-"
   "ollama|ollama|ollama|ollama-cloud"
   "cheapestinference|cheapestinference|cheapestinference|-"
   "meta|meta|meta|meta"
   "nanogpt|-|nanogpt|nanogpt"
+  # pi reaches OpenAI through its built-in openai-codex provider, whose
+  # catalog no dotfiles config controls, so only opencode and kilo compare.
+  "openai|-|openai|openai"
 )
 BUILTIN_PROVIDERS=()
-# Dead providers: skip parity, just warn if present
-DEAD_PROVIDERS=("openai" "openai-codex" "alibaba-tknplan" "opencode-go" "minimax")
+# Live, but each harness bundles its own upstream catalog snapshot and no
+# dotfiles config shapes it, so there is nothing of ours to compare.
+CATALOG_ONLY_PROVIDERS=("openrouter")
+
+# Liveness comes from provider-status.yml, the one record of which
+# providers are dispatchable. false = dead: skip parity, warn if present.
+# true = live: must have a PROVIDER_SPECS or BUILTIN_PROVIDERS entry, so a
+# provider can't be marked live while parity silently ignores it.
+PROVIDER_STATUS="$DOTFILES_ROOT/.config/opencode/provider-status.yml"
+[[ -f "$PROVIDER_STATUS" ]] || die "missing $PROVIDER_STATUS"
+mapfile -t LIVE_PROVIDERS < <(awk -F': *' '/^[a-z0-9-]+: *true *$/ {print $1}' "$PROVIDER_STATUS")
+mapfile -t DEAD_PROVIDERS < <(awk -F': *' '/^[a-z0-9-]+: *false *$/ {print $1}' "$PROVIDER_STATUS")
 
 # Track failures
 FAILURES=()
@@ -274,7 +286,10 @@ $missing_in_opencode")
 }
 
 # --- run checks ---
+# A spec whose provider is false in provider-status.yml is kept, so its
+# shape survives a re-enable, but skipped: the DEAD loop below warns instead.
 for spec in "${PROVIDER_SPECS[@]}"; do
+  [[ " ${DEAD_PROVIDERS[*]} " == *" ${spec%%|*} "* ]] && continue
   check_strict "$spec"
 done
 
@@ -408,8 +423,19 @@ for p in "${DEAD_PROVIDERS[@]}"; do
   op_dead="$(awk -v pat="^${p}/" 'BEGIN{c=0} tolower($0) ~ tolower(pat) {c++} END{print c}' "$OPENCODE_MODELS")"
   ki_dead="$(awk -v pat="^${p}/" 'BEGIN{c=0} tolower($0) ~ tolower(pat) {c++} END{print c}' "$KILO_MODELS")"
   if [[ "$pi_dead" -gt 0 || "$op_dead" -gt 0 || "$ki_dead" -gt 0 ]]; then
-    WARNINGS+=("DEAD: $p present pi:$pi_dead opencode:$op_dead kilo:$ki_dead (sub dead 2026-08-22, ignored for parity)")
+    WARNINGS+=("DEAD: $p present pi:$pi_dead opencode:$op_dead kilo:$ki_dead (false in provider-status.yml, ignored for parity)")
   fi
+done
+
+# Every live provider must be checked, and every checked provider must be
+# listed in provider-status.yml, true or false.
+SPECCED=("${BUILTIN_PROVIDERS[@]}" "${CATALOG_ONLY_PROVIDERS[@]}")
+for spec in "${PROVIDER_SPECS[@]}"; do SPECCED+=("${spec%%|*}"); done
+for p in "${LIVE_PROVIDERS[@]}"; do
+  [[ " ${SPECCED[*]} " == *" $p "* ]] || FAILURES+=("UNCHECKED LIVE: provider-status.yml marks $p live but no PROVIDER_SPECS, BUILTIN_PROVIDERS, or CATALOG_ONLY_PROVIDERS entry covers it")
+done
+for p in "${SPECCED[@]}"; do
+  [[ " ${LIVE_PROVIDERS[*]} ${DEAD_PROVIDERS[*]} " == *" $p "* ]] || FAILURES+=("UNLISTED: $p is checked for parity but provider-status.yml has no entry for it")
 done
 
 # --- output ---

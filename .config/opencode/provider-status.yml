@@ -1,0 +1,18 @@
+# Which opencode providers are dispatchable.
+# true  = live, safe to dispatch
+# false = do not dispatch
+#
+# This file is the only place provider liveness is recorded. Do not
+# restate it in opencode.jsonc comments; a second copy goes stale.
+
+meta: true
+cheapestinference: true
+xiaomi-token-plan: true
+ollama: true
+openai: true
+openrouter: true
+nanogpt: true
+
+minimax: false
+opencode-go: false
+alibaba-tknplan: false

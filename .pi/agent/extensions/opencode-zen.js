@@ -8,13 +8,14 @@
  * (https://opencode.ai/zen/v1) rejects requests with no/invalid key even for
  * the nominally "free" models.
  *
- * 2026-08-30: the opencode-go block below is commented out (subscription
- * lapsed). The opencode Zen free tier provider stays live.
+ * 2026-08-30: the opencode-go block below was commented out (subscription
+ * lapsed). Current liveness is recorded only in
+ * .config/opencode/provider-status.yml in the dotfiles repo.
  */
 export default function (pi) {
 // DEAD 2026-08-30: opencode-go subscription lapsed. Block commented
 // out, not deleted, so the provider shape survives for a future
-// re-enable. The opencode (Zen free tier) provider below stays live.
+// re-enable. Current liveness: .config/opencode/provider-status.yml.
 // See providers/pre-retirement-2026-08-30 tag in ~/.pi and ~/.dotfiles.
 //   pi.registerProvider("opencode-go", {
 //     name: "OpenCode Go",

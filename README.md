@@ -155,9 +155,14 @@ live configs (not deleted — the blocks survive as comments in
 
 To bring any of them back, retrieve the pre-retirement config from the
 `providers/pre-retirement-2026-08-30` tag in this repo (and the matching tag
-in the `~/.pi` repo for the pi-side extensions), then re-enable the
-commented blocks. The tag is the last commit before the retirement change,
-so `git show providers/pre-retirement-2026-08-30:.config/opencode/opencode.jsonc`
+in the `~/.pi` repo for the pi-side extensions), re-enable the commented
+blocks, and flip the provider to `true` in
+`.config/opencode/provider-status.yml`. That file is the one record of which
+providers are live, and `scripts/verify-provider-parity.sh` reads it: a
+provider left at `false` is skipped for parity, and one marked `true` with no
+parity entry fails the check. The tag is the last commit before the
+retirement change, so
+`git show providers/pre-retirement-2026-08-30:.config/opencode/opencode.jsonc`
 has the full live config as it stood.
 
 `.config/kilo/kilo.jsonc` used a differently-named provider block

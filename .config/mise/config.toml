@@ -294,6 +294,7 @@ experimental = true
 # a stale snapshot. None of those four are tracked.
 "~/.config/opencode/opencode.json" = {}
 "~/.config/opencode/opencode.jsonc" = {}
+"~/.config/opencode/provider-status.yml" = {}
 "~/.config/opencode/tui.json" = {}
 "~/.config/opencode/agent/hermes.md" = {}
 "~/.config/opencode/agents/notools-luna.md" = {}
