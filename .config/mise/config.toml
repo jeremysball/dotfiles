@@ -21,9 +21,10 @@
 # jeremysball/mise-en-system repo, not in this file's [tasks] table -- this
 # config is loaded globally by mise (required so [tools] lands on PATH from
 # any directory), and a global [tasks] table would leak into every other
-# project's `mise tasks`. Run them with `mise-sys <task>` (a fish function
-# wrapping `mise -C ~/projects/mise-en-system run <task>`) or `mise -C
-# ~/projects/mise-en-system run <task>` directly. For secret updates use
+# project's `mise tasks`. That repo is checked out as this repo's
+# mise-en-system/ submodule, and init.sh runs every task it lists. Run one
+# with `mise-sys <task>` (a fish function wrapping `mise -C
+# ~/.dotfiles/mise-en-system run <task>`) or that `mise -C` call directly. For secret updates use
 # `mise-sys secrets-sync` (pulls both repos and re-links), not re-running
 # `install-secrets` which only clones.
 #
@@ -124,14 +125,6 @@ ast-grep = "0.44.1"
 idiomatic_version_file_enable_tools = ["node", "python", "go"]
 experimental = true
 
-# The mise-en-system repo (see the [tasks] header comment above). Declaring
-# it here lets `mise bootstrap repos apply` clone/converge it instead of
-# init.sh hand-rolling clone-or-pull: mise clones it if missing and pulls
-# only when the checkout is clean and origin matches, leaving a dirty or
-# diverged checkout alone rather than failing the whole bootstrap.
-[bootstrap.repos]
-"~/projects/mise-en-system" = { url = "https://github.com/jeremysball/mise-en-system.git" }
-
 # Every file this repo manages, symlinked from ~/.dotfiles (the default
 # dotfiles.root) into place by `mise bootstrap dotfiles apply`. Every entry
 # is one of:
@@ -221,7 +214,6 @@ experimental = true
 # systemd
 "~/.config/systemd/user/bumblebee-nightly.service" = {}
 "~/.config/systemd/user/bumblebee-nightly.timer" = {}
-"~/.config/systemd/user/bifrost.service" = {}
 "~/.config/systemd/user/mise-upgrade.service" = {}
 "~/.config/systemd/user/mise-upgrade.timer" = {}
 
@@ -272,13 +264,6 @@ experimental = true
 # bumblebee-nightly (config only; the systemd service/timer pair is tracked
 # above alongside bumblebee-nightly.{service,timer})
 "~/.config/bumblebee-nightly/config" = {}
-
-# bifrost -- config.json only. The unit is tracked above alongside
-# bifrost.service. Lives under ~/.local/state because the app also writes
-# its own sqlite state/log databases into the same directory; the env file
-# with the actual provider keys is never tracked here, regenerate it via
-# `mise-sys install-bifrost`, which pulls from global.env.
-"~/.local/state/bifrost/config.json" = {}
 
 # herdr -- config.toml only. herdr-client.log, herdr-server.log,
 # session.json, release-notes.json are runtime state, not config, and
