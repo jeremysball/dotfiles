@@ -184,6 +184,7 @@ if [ -f "$MISE_SYSTEM_DIR/mise.toml" ]; then
       ready=1
       for d in ${DEPS[$t]}; do
         # A dependency outside the list (hidden) cannot be ordered against.
+        # The run loop below skips its dependents instead.
         if [ -n "${DEPS[$d]+x}" ] && [ -z "${PLACED[$d]:-}" ]; then ready=0; fi
       done
       if ((ready)); then
@@ -212,17 +213,40 @@ if [ -f "$MISE_SYSTEM_DIR/mise.toml" ]; then
     done
     return 1
   }
-  CYCLE=()
+  # Each cycle is named on its own: two unrelated cycles must not read as
+  # one. A task's cycle is every task it reaches that also reaches it back.
+  declare -A CYCLE_OF=()
   for t in "${ALL_TASKS[@]}"; do
-    if [ -z "${PLACED[$t]:-}" ] && _reaches "$t" "$t"; then CYCLE+=("$t"); fi
+    { [ -z "${PLACED[$t]:-}" ] && _reaches "$t" "$t"; } || continue
+    members=()
+    for u in "${ALL_TASKS[@]}"; do
+      if [ "$u" = "$t" ] || { [ -z "${PLACED[$u]:-}" ] && _reaches "$t" "$u" && _reaches "$u" "$t"; }; then
+        members+=("$u")
+      fi
+    done
+    CYCLE_OF[$t]="${members[*]}"
   done
   for t in "${ALL_TASKS[@]}"; do
     [ -n "${PLACED[$t]:-}" ] && continue
-    if [[ " ${CYCLE[*]} " == *" $t "* ]]; then
-      _record "$t" failed 0 "dependency cycle among: ${CYCLE[*]}"
-    else
-      _record "$t" skipped 0 "depends on the dependency cycle among: ${CYCLE[*]}"
+    if [ -n "${CYCLE_OF[$t]:-}" ]; then
+      _record "$t" failed 0 "dependency cycle among: ${CYCLE_OF[$t]}"
+      continue
     fi
+    # Every distinct cycle this task reaches, in listing order.
+    reached="" n_reached=0
+    declare -A seen_cycle=()
+    for u in "${ALL_TASKS[@]}"; do
+      c="${CYCLE_OF[$u]:-}"
+      if [ -n "$c" ] && [ -z "${seen_cycle[$c]:-}" ] && _reaches "$t" "$u"; then
+        seen_cycle[$c]=1
+        reached+="${reached:+; }$c"
+        n_reached=$((n_reached + 1))
+      fi
+    done
+    unset seen_cycle
+    noun=cycle
+    if ((n_reached > 1)); then noun=cycles; fi
+    _record "$t" skipped 0 "depends on the dependency $noun among: $reached"
   done
 
   # Tasks stream their output instead of hiding behind a spinner: several
@@ -230,20 +254,27 @@ if [ -f "$MISE_SYSTEM_DIR/mise.toml" ]; then
   # invisible hang. `script` gives each task a real terminal while still
   # logging it; a `| tee` pipe would take the TTY away, and without --raw
   # mise doesn't connect the task's stdin at all.
-  declare -A TASK_STATUS=()
+  declare -A TASK_STATUS=() IS_HIDDEN=()
+  for h in "${HIDDEN_TASKS[@]}"; do IS_HIDDEN[$h]=1; done
   i=0
   for t in "${ORDER[@]}"; do
     i=$((i + 1))
     blocked=""
     for d in ${DEPS[$t]}; do
-      if [ "${TASK_STATUS[$d]:-}" = failed ] || [ "${TASK_STATUS[$d]:-}" = skipped ]; then blocked="$d"; fi
+      if [ -n "${IS_HIDDEN[$d]:-}" ]; then
+        # --skip-deps would otherwise run this task without its hidden
+        # dependency ever having run.
+        blocked="depends on hidden task $d, which never runs unattended"
+      elif [ "${TASK_STATUS[$d]:-}" = failed ] || [ "${TASK_STATUS[$d]:-}" = skipped ]; then
+        # Same rule mise applies itself: a dependent never runs after its
+        # dependency failed.
+        blocked="dependency $d did not succeed"
+      fi
     done
     if [ -n "$blocked" ]; then
-      # Same rule mise applies itself: a dependent never runs after its
-      # dependency failed.
       TASK_STATUS[$t]=skipped
-      _record "$t" skipped 0 "dependency $blocked did not succeed"
-      _gum_log warn "⊘ $t skipped: dependency $blocked did not succeed"
+      _record "$t" skipped 0 "$blocked"
+      _gum_log warn "⊘ $t skipped: $blocked"
       continue
     fi
     if _has_gum; then

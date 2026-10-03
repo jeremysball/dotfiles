@@ -1,0 +1,38 @@
+name: test-init
+
+# Runs tests/init.bats through `mise run test`: init.sh against stub
+# mise-en-system task tables in a sandboxed HOME. See the header of
+# tests/init.bats for what is stubbed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'init.sh'
+      - 'tests/**'
+      - '.mise.toml'
+      - '.github/workflows/test-init.yml'
+  pull_request:
+    paths:
+      - 'init.sh'
+      - 'tests/**'
+      - '.mise.toml'
+      - '.github/workflows/test-init.yml'
+  workflow_dispatch:
+
+jobs:
+  bats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+      # .config/mise/config.toml is the whole dotfiles toolset, and mise reads
+      # it as a project config from the checkout. Ignoring it means
+      # `mise run test` installs only the task's own tools, not all of them.
+      MISE_IGNORED_CONFIG_PATHS: ${{ github.workspace }}/.config/mise/config.toml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+      - run: mise run test

@@ -1,0 +1,14 @@
+# Repo-local tasks for working on this repo. Run the init.sh tests with
+# `mise run test`.
+#
+# The test tools are scoped to the task (`tools` inside it), not a [tools]
+# table. init.sh runs a bare `mise install` from the repo root, and a
+# [tools] entry here would install bats on every bootstrapped machine.
+#
+# bats resolves to aqua:bats-core/bats-core through mise's registry. aqua is
+# fine here despite the build-from-source rule: bats-core is pure bash, and
+# the aqua package is its release tarball of those scripts.
+[tasks.test]
+description = "Run the init.sh bats suite (tests/init.bats)"
+tools = { bats = "1.14.0", jq = "1.8.2", gum = "2.0.2" }
+run = "bats tests"
