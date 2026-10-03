@@ -1,7 +1,7 @@
 // DEAD 2026-08-30: alibaba token plan lapsed ("Access to model denied"
 // on every dispatch, task oc_mtfxgej4_a29b5fd1). Whole file commented
 // out, not deleted, so the provider shape survives for a future
-// re-enable.
+// re-enable. Current liveness: .config/opencode/provider-status.yml.
 // /**
 //  * Alibaba Cloud Model Studio "Token Plan" subscription provider (SG
 //  * endpoint, verified live with $ALIBABA_TKN_PLAN_API_KEY → 200 OK on

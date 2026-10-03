@@ -1,6 +1,7 @@
 // DEAD 2026-08-30: minimax quota exhausted. Whole file commented out, not deleted,
 // so the provider shape survives for a future re-enable. See
 // providers/pre-retirement-2026-08-30 tag in ~/.pi and ~/.dotfiles.
+// Current liveness: .config/opencode/provider-status.yml.
 // /**
 //  * Adds MiniMax-M3 to the built-in `minimax` provider.
 //  *

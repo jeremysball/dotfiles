@@ -286,7 +286,10 @@ $missing_in_opencode")
 }
 
 # --- run checks ---
+# A spec whose provider is false in provider-status.yml is kept, so its
+# shape survives a re-enable, but skipped: the DEAD loop below warns instead.
 for spec in "${PROVIDER_SPECS[@]}"; do
+  [[ " ${DEAD_PROVIDERS[*]} " == *" ${spec%%|*} "* ]] && continue
   check_strict "$spec"
 done
 
@@ -424,14 +427,15 @@ for p in "${DEAD_PROVIDERS[@]}"; do
   fi
 done
 
-# Every live provider must be checked, and nothing checked may be dead.
+# Every live provider must be checked, and every checked provider must be
+# listed in provider-status.yml, true or false.
 SPECCED=("${BUILTIN_PROVIDERS[@]}" "${CATALOG_ONLY_PROVIDERS[@]}")
 for spec in "${PROVIDER_SPECS[@]}"; do SPECCED+=("${spec%%|*}"); done
 for p in "${LIVE_PROVIDERS[@]}"; do
   [[ " ${SPECCED[*]} " == *" $p "* ]] || FAILURES+=("UNCHECKED LIVE: provider-status.yml marks $p live but no PROVIDER_SPECS, BUILTIN_PROVIDERS, or CATALOG_ONLY_PROVIDERS entry covers it")
 done
 for p in "${SPECCED[@]}"; do
-  [[ " ${LIVE_PROVIDERS[*]} " == *" $p "* ]] || FAILURES+=("NOT LIVE: $p is checked for parity but provider-status.yml does not mark it true")
+  [[ " ${LIVE_PROVIDERS[*]} ${DEAD_PROVIDERS[*]} " == *" $p "* ]] || FAILURES+=("UNLISTED: $p is checked for parity but provider-status.yml has no entry for it")
 done
 
 # --- output ---
