@@ -75,8 +75,11 @@ export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:$PATH"
 # one broken step (a flaky network fetch, a task that needs a human) never
 # hides how the rest went. The report at the bottom is built from these
 # arrays, and every step's full output lands in LOG_DIR.
-LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/init/$(date +%Y%m%dT%H%M%S)"
-mkdir -p "$LOG_DIR"
+# mktemp suffix: two runs started in the same second must not share (and
+# truncate) each other's logs.
+LOG_BASE="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/init"
+mkdir -p "$LOG_BASE"
+LOG_DIR="$(mktemp -d "$LOG_BASE/$(date +%Y%m%dT%H%M%S)-XXXX")"
 R_NAME=()
 R_STATUS=() # ok | failed | skipped
 R_SECS=()
@@ -190,9 +193,35 @@ if [ -f "$MISE_SYSTEM_DIR/mise.toml" ]; then
       fi
     done
   done
+  # Whatever is left unplaced either sits on a cycle or only depends on
+  # one. Name the cycle members, and report the rest as skipped, the same
+  # as any other task whose dependency could not run.
+  _reaches() { # from to: does FROM reach TO through unplaced depends?
+    local -A seen=()
+    local stack=("$1") n d
+    while ((${#stack[@]})); do
+      n="${stack[-1]}"
+      unset 'stack[-1]'
+      for d in ${DEPS[$n]}; do
+        { [ -n "${DEPS[$d]+x}" ] && [ -z "${PLACED[$d]:-}" ]; } || continue
+        [ "$d" = "$2" ] && return 0
+        [ -n "${seen[$d]:-}" ] && continue
+        seen[$d]=1
+        stack+=("$d")
+      done
+    done
+    return 1
+  }
+  CYCLE=()
   for t in "${ALL_TASKS[@]}"; do
-    if [ -z "${PLACED[$t]:-}" ]; then
-      _record "$t" failed 0 "dependency cycle in mise-en-system depends"
+    if [ -z "${PLACED[$t]:-}" ] && _reaches "$t" "$t"; then CYCLE+=("$t"); fi
+  done
+  for t in "${ALL_TASKS[@]}"; do
+    [ -n "${PLACED[$t]:-}" ] && continue
+    if [[ " ${CYCLE[*]} " == *" $t "* ]]; then
+      _record "$t" failed 0 "dependency cycle among: ${CYCLE[*]}"
+    else
+      _record "$t" skipped 0 "depends on the dependency cycle among: ${CYCLE[*]}"
     fi
   done
 
@@ -234,7 +263,8 @@ if [ -f "$MISE_SYSTEM_DIR/mise.toml" ]; then
     else
       TASK_STATUS[$t]=failed
       _record "$t" failed "$secs" "exit $rc, see $log"
-      _gum_log error "✘ $t failed (exit $rc)"
+      _gum_log error "✘ $t failed (exit $rc), last lines of $log:"
+      tail -n 15 "$log" >&2
     fi
   done
 else
