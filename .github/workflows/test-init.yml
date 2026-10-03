@@ -1,7 +1,8 @@
 name: test-init
 
-# Runs tests/init.bats: init.sh against stub mise-en-system task tables in a
-# sandboxed HOME. See the header of tests/init.bats for what is stubbed.
+# Runs tests/init.bats through `mise run test`: init.sh against stub
+# mise-en-system task tables in a sandboxed HOME. See the header of
+# tests/init.bats for what is stubbed.
 
 on:
   push:
@@ -24,15 +25,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      # The repo's own .config/mise/config.toml is a project config to mise
-      # when run from the checkout; trust it so mise doesn't refuse to start.
       MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+      # .config/mise/config.toml is the whole dotfiles toolset, and mise reads
+      # it as a project config from the checkout. Ignoring it means
+      # `mise run test` installs only the task's own tools, not all of them.
+      MISE_IGNORED_CONFIG_PATHS: ${{ github.workspace }}/.config/mise/config.toml
     steps:
       - uses: actions/checkout@v4
-      - name: Install jq
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq
       - uses: jdx/mise-action@v2
         with:
-          # Only bats (pinned in .mise.toml), not the whole dotfiles toolset.
-          install_args: aqua:bats-core/bats-core
-      - run: bats tests
+          install: false
+      - run: mise run test
