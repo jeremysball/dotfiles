@@ -13,7 +13,8 @@
         "--disable-extensions",
         "--disable-background-networking",
         "--ignore-certificate-errors"
-      ]
+      ],
+      "executablePath": "/usr/bin/chromium"
     }
   }
 }

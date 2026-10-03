@@ -2,10 +2,7 @@
   "mcpServers": {
     "playwright-mcp": {
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/playwright-mcp"],
-      "env": {
-        "PLAYWRIGHT_BROWSERS_PATH": "0"
-      }
+      "args": ["-y", "@playwright/mcp@latest", "--config", "${HOME}/.config/playwright-mcp/config.json"]
     }
   }
 }

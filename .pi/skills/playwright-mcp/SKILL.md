@@ -10,16 +10,15 @@ Browser automation using Playwright MCP server via `mcporter`.
 ## Setup
 
 ```bash
-# 1. Install
-npm install -g @playwright/mcp
-npx playwright install chromium
+# 1. Install chromium (the server runs through npx, nothing global to install)
+mise -C ~/.dotfiles/mise-en-system run install-chromium   # fish: mise-sys install-chromium
 
-# 2. Configure ~/.config/mcporter/config.json
+# 2. Configure ~/.config/mcporter/config.json (dotfiles tracks this file)
 {
   "mcpServers": {
     "playwright-mcp": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp"]
+      "args": ["-y", "@playwright/mcp@latest", "--config", "${HOME}/.config/playwright-mcp/config.json"]
     }
   }
 }

@@ -108,11 +108,8 @@ mcporter list | grep playwright
 # Test basic connectivity
 mcporter call playwright-mcp.browser_navigate url=https://example.com
 
-# Check if mcp-playwright is installed
-which mcp-playwright
-
-# Verify Playwright browsers are installed
-npx playwright install chromium firefox webkit
+# The server launches pacman's chromium (see ~/.config/playwright-mcp/config.json)
+test -x /usr/bin/chromium || mise -C ~/.dotfiles/mise-en-system run install-chromium
 
 # View logs (if any)
 mcporter call playwright-mcp.browser_navigate url=https://example.com 2>&1
