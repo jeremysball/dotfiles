@@ -1,0 +1,7 @@
+# Repo-local dev tools for working on this repo. Not deployed anywhere: the
+# global toolset is .config/mise/config.toml.
+[tools]
+# aqua: retained over npm:bats. bats-core is pure bash and the aqua package
+# is its release tarball of those scripts, so it is already the source, and
+# it needs no node runtime in CI. Verified via `mise which bats`.
+"aqua:bats-core/bats-core" = "1.14.0"
