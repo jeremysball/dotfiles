@@ -19,15 +19,21 @@ exec fish
 ```
 
 `init.sh` runs `mise bootstrap dotfiles apply` (creates the symlinks) and
-then `mise install` (pulls down the tools). It also clones the separate
+then `mise install` (pulls down the tools). It also checks out the separate
 [jeremysball/mise-en-system](https://github.com/jeremysball/mise-en-system)
-repo to `~/projects/mise-en-system` and runs its install tasks
-(`install-secrets`, `install-dotclaude`, `install-serper-axi`). Those tasks
+repo as the `mise-en-system/` submodule and runs every task it lists, one
+at a time in `depends` order. A failed step doesn't stop the run: a task
+whose dependency failed is skipped, everything else still runs, and a
+report at the end shows each step's result, its time, and the log path for
+anything that failed (logs live under
+`$XDG_STATE_HOME/dotfiles/init/<timestamp>/`). The script exits 1 if any
+step failed. Tasks marked `hide = true` in mise-en-system (manual-only ones
+like `monolisa-nerd-font-patch`) never run here. Those tasks
 live there instead of in this repo's own `.config/mise/config.toml` because
 that file is loaded globally (needed for `[tools]` to land on `PATH` from
 any directory), and a global `[tasks]` table would leak into every other
 project's `mise tasks` output. Run any of them again later with
-`mise-sys <task>`, a fish function wrapping `mise -C ~/projects/mise-en-system
+`mise-sys <task>`, a fish function wrapping `mise -C ~/.dotfiles/mise-en-system
 run <task>`. For secret updates after the first install, use
 `mise-sys secrets-sync` (pulls both `secret-management` and `password-store`
 and re-links) -- re-running `install-secrets` only clones when missing and
@@ -251,7 +257,7 @@ New host with the shared key (hands-free after first unlock):
 
 ```fish
 git clone https://github.com/jeremysball/dotfiles ~/.dotfiles; cd ~/.dotfiles; ./init.sh
-# init.sh clones mise-en-system and runs install-secrets (clones password-store)
+# init.sh runs every mise-en-system task, including install-secrets (clones password-store)
 mise-sys secrets-sync  # pulls ssh/shared + ssh/shared.pub, writes ~/.ssh/id_ed25519 (600) + authorized_keys (600)
 secrets-unlock         # one pinentry prompt if global/env changed, then exec fish
 ssh coding-workspace   # no ssh-copy-id needed
