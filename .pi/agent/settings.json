@@ -2,7 +2,7 @@
   "lastChangelogVersion": "0.83.0",
   "defaultProvider": "nanogpt",
   "defaultModel": "z-ai/glm-5.3-flash-uncensored",
-  "defaultThinkingLevel": "high",
+  "defaultThinkingLevel": "medium",
   "treeFilterMode": "default",
   "doubleEscapeAction": "tree",
   "collapseChangelog": true,

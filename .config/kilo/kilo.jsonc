@@ -69,7 +69,9 @@
         "gpt-5.6-sol": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
         "gpt-5.6-sol-fast": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
         "gpt-5.6-terra": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
-        "gpt-5.6-terra-fast": { "limit": { "context": 200000, "input": 200000, "output": 128000 } }
+        "gpt-5.6-terra-fast": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
+        "gpt-6.1-sol": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
+        "gpt-6.1-sol-fast": { "limit": { "context": 200000, "input": 200000, "output": 128000 } }
       }
     },
     "kilo": {
