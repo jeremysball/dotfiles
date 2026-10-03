@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Physical path (-P): mise reports each task's `source` with symlinks
+# resolved, and the task filter below compares against it. A logical path
+# through a symlinked checkout would match nothing and run zero tasks.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 cd "$REPO_DIR"
 
 # mise's dotfiles.root setting defaults to ~/.dotfiles. Pointing it at
@@ -142,12 +145,19 @@ if [ -f "$MISE_SYSTEM_DIR/mise.toml" ]; then
   # report row set would look like a clean run.
   TASK_LINES=()
   HIDDEN_TASKS=()
-  if tasks_json="$(mise -C "$MISE_SYSTEM_DIR" tasks ls --local --hidden --json 2>"$LOG_DIR/enumerate-tasks.log")" &&
-    jq -e 'type == "array"' >/dev/null <<<"$tasks_json"; then
-    jq_src=(--arg src "$MISE_SYSTEM_DIR/mise.toml")
-    mapfile -t TASK_LINES < <(jq -r "${jq_src[@]}" \
-      '.[] | select(.source == $src and (.hide | not)) | "\(.name)\t\(.depends | map(tostring) | join(" "))"' <<<"$tasks_json")
-    mapfile -t HIDDEN_TASKS < <(jq -r "${jq_src[@]}" '.[] | select(.source == $src and .hide) | .name' <<<"$tasks_json")
+  # jq output goes through variables, not `mapfile < <(jq ...)`: process
+  # substitution drops jq's exit status, so a jq error would silently cut
+  # the task list short.
+  enum_log="$LOG_DIR/enumerate-tasks.log"
+  jq_src=(--arg src "$MISE_SYSTEM_DIR/mise.toml")
+  if tasks_json="$(mise -C "$MISE_SYSTEM_DIR" tasks ls --local --hidden --json 2>"$enum_log")" &&
+    jq -e 'type == "array"' >/dev/null 2>>"$enum_log" <<<"$tasks_json" &&
+    visible="$(jq -r "${jq_src[@]}" \
+      '.[] | select(.source == $src and (.hide | not)) | "\(.name)\t\(.depends | map(tostring) | join(" "))"' \
+      2>>"$enum_log" <<<"$tasks_json")" &&
+    hidden="$(jq -r "${jq_src[@]}" '.[] | select(.source == $src and .hide) | .name' 2>>"$enum_log" <<<"$tasks_json")"; then
+    [ -n "$visible" ] && mapfile -t TASK_LINES <<<"$visible"
+    [ -n "$hidden" ] && mapfile -t HIDDEN_TASKS <<<"$hidden"
   else
     _record enumerate-tasks failed 0 "could not list mise-en-system tasks, see $LOG_DIR/enumerate-tasks.log"
   fi
@@ -187,8 +197,10 @@ if [ -f "$MISE_SYSTEM_DIR/mise.toml" ]; then
   done
 
   # Tasks stream their output instead of hiding behind a spinner: several
-  # use sudo or ask questions (pacman, doom install), and a prompt under a
-  # spinner is an invisible hang. tee still keeps a full log per task.
+  # use sudo or may ask questions, and a prompt under a spinner is an
+  # invisible hang. `script` gives each task a real terminal while still
+  # logging it; a `| tee` pipe would take the TTY away, and without --raw
+  # mise doesn't connect the task's stdin at all.
   declare -A TASK_STATUS=()
   i=0
   for t in "${ORDER[@]}"; do
@@ -213,7 +225,7 @@ if [ -f "$MISE_SYSTEM_DIR/mise.toml" ]; then
     log="$LOG_DIR/task-$t.log"
     start=$SECONDS
     rc=0
-    mise -C "$MISE_SYSTEM_DIR" run --skip-deps "$t" 2>&1 | tee "$log" || rc=$?
+    script -qefc "$(printf '%q ' mise -C "$MISE_SYSTEM_DIR" run --raw --skip-deps "$t")" "$log" || rc=$?
     secs=$((SECONDS - start))
     if ((rc == 0)); then
       TASK_STATUS[$t]=ok
