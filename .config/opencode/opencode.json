@@ -86,7 +86,7 @@
     },
     "playwright": {
       "type": "local",
-      "command": ["npx", "@playwright/mcp@latest", "--headless", "--isolated"],
+      "command": ["npx", "@playwright/mcp@latest", "--config", "{env:HOME}/.config/playwright-mcp/config.json"],
       "enabled": true
     },
     "taskferry": {

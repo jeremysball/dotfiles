@@ -20,18 +20,18 @@ if [ -f "$MCP_CONFIG_FILE" ]; then
     cp "$MCP_CONFIG_FILE" "${MCP_CONFIG_FILE}.bak"
 fi
 
-# Create or update config
-cat > "$MCP_CONFIG_FILE" << EOF
+# Create or update config. Same entry as the dotfiles-tracked
+# ~/.config/mcporter/config.json. The quoted heredoc keeps ${HOME} literal;
+# mcporter expands it at load time. --config points at
+# ~/.config/playwright-mcp/config.json, which launches /usr/bin/chromium.
+cat > "$MCP_CONFIG_FILE" << 'EOF'
 {
-  "servers": [
-    {
-      "name": "playwright-mcp",
-      "transport": {
-        "type": "stdio",
-        "command": "mcp-playwright"
-      }
+  "mcpServers": {
+    "playwright-mcp": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--config", "${HOME}/.config/playwright-mcp/config.json"]
     }
-  ]
+  }
 }
 EOF
 
@@ -53,13 +53,13 @@ else
     echo "⚠️  Configuration saved but mcporter may not detect it yet."
     echo "   Try running: mcporter list"
     echo ""
-    echo "   If mcp-playwright is not installed, install it with:"
-    echo "   npm install -g @anthropics/playwright-mcp"
+    echo "   The server runs through npx, so there is nothing to install"
+    echo "   globally. Chromium comes from pacman: mise-sys install-chromium"
 fi
 
 echo ""
 echo "📖 Next steps:"
-echo "   1. Ensure mcp-playwright is installed: which mcp-playwright"
+echo "   1. Ensure chromium is installed: test -x /usr/bin/chromium"
 echo "   2. Test with: mcporter call playwright-mcp.browser_navigate url=https://example.com"
 echo "   3. Take a screenshot: mcporter call playwright-mcp.browser_screenshot path=/tmp/test.png"
 echo ""
