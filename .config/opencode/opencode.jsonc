@@ -31,9 +31,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
-  // Compaction: cap the effective context window at 200k tokens across all
-  // actively-dispatched models, then reserve 25k of that as the trigger
-  // buffer so auto-compact fires once used context crosses ~175k
+  // Compaction: cap the effective context window at 200k tokens across
+  // actively-dispatched models (DeepSeek V4 is the exception: flash 400k,
+  // pro 350k, per the 2026-08-30 context-limit directive), then reserve
+  // 25k of that as the trigger buffer so auto-compact fires 25k below
+  // each model's limit (~175k at the 200k cap)
   // (per the schema, `reserved` is a literal token buffer subtracted from
   // limit.context, NOT a percentage — verified against
   // https://opencode.ai/config.json's Config.compaction.reserved
@@ -564,7 +566,7 @@
           "name": "DeepSeek V4 Flash 0731 (Ollama Cloud)",
           "reasoning": true,
           "tool_call": true,
-          "limit": { "context": 200000, "output": 131072 },
+          "limit": { "context": 400000, "output": 131072 },
           "reasoningEffort": "max",
           "variants": {
             "max": { "reasoningEffort": "max" }
@@ -576,7 +578,7 @@
           "name": "DeepSeek V4 Pro 0813 (Ollama Cloud)",
           "reasoning": true,
           "tool_call": true,
-          "limit": { "context": 200000, "output": 131072 },
+          "limit": { "context": 350000, "output": 131072 },
           "reasoningEffort": "max",
           "variants": {
             "max": { "reasoningEffort": "max" }
@@ -592,8 +594,8 @@
     },
     "openrouter": {
       "models": {
-        "deepseek/deepseek-v4-flash": { "limit": { "context": 200000, "output": 393216 } },
-        "deepseek/deepseek-v4-flash-0731": { "limit": { "context": 200000, "output": 384000 } },
+        "deepseek/deepseek-v4-flash": { "limit": { "context": 400000, "output": 393216 } },
+        "deepseek/deepseek-v4-flash-0731": { "limit": { "context": 400000, "output": 384000 } },
         "tencent/hy3": { "limit": { "context": 200000, "output": 128000 } },
         "tencent/hy3-preview": { "limit": { "context": 200000, "output": 262144 } }
       }

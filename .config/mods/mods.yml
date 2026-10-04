@@ -78,7 +78,7 @@ apis:
     models: # plan-included models, mirrored from opencode.jsonc
       "deepseek-v4-flash:0731":
         aliases: ["ds", "flash4"]
-        max-input-chars: 700000
+        max-input-chars: 1400000
         fallback: kimi-k2.7-code
       kimi-k2.7-code:
         aliases: ["k27", "smart"]
@@ -91,7 +91,7 @@ apis:
         max-input-chars: 700000
       deepseek-v4-pro:
         aliases: ["dspro"]
-        max-input-chars: 700000
+        max-input-chars: 1225000
   openrouter:
     base-url: https://openrouter.ai/api/v1
     api-key:
@@ -107,7 +107,7 @@ apis:
         fallback: qwen/qwen3.7-flash
       deepseek/deepseek-v4-flash-0731:
         aliases: ["or-ds"]
-        max-input-chars: 1000000
+        max-input-chars: 1400000
         fallback: qwen/qwen3.7-flash
       inclusionai/ling-2.6-flash:
         aliases: ["tiny"]
