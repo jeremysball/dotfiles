@@ -32,8 +32,9 @@
   "$schema": "https://opencode.ai/config.json",
 
   // Compaction: cap the effective context window at 200k tokens across
-  // actively-dispatched models (DeepSeek V4 is the exception: flash 400k,
-  // pro 350k, per the 2026-08-30 context-limit directive), then reserve
+  // actively-dispatched models (exceptions: DeepSeek V4 flash 400k and
+  // pro 350k, per the 2026-08-30 context-limit directive; gpt-6.1-sol and
+  // -fast 500k, by choice on 2026-10-03), then reserve
   // 25k of that as the trigger buffer so auto-compact fires 25k below
   // each model's limit (~175k at the 200k cap)
   // (per the schema, `reserved` is a literal token buffer subtracted from
