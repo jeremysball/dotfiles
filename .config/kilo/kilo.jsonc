@@ -54,8 +54,9 @@
   },
   "provider": {
     "openai": {
-      // Cap direct OpenAI models at the fleet's 200k context budget. Set
-      // input explicitly because compaction uses it when it is present.
+      // Cap direct OpenAI models at the fleet's 200k context budget, except
+      // gpt-6.1-sol/-fast, which get 500k by choice. Set input explicitly
+      // because compaction uses it when it is present.
       "models": {
         "gpt-5.3-codex-spark": { "limit": { "context": 200000, "output": 32000 } },
         "gpt-5.4": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
@@ -70,8 +71,8 @@
         "gpt-5.6-sol-fast": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
         "gpt-5.6-terra": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
         "gpt-5.6-terra-fast": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
-        "gpt-6.1-sol": { "limit": { "context": 200000, "input": 200000, "output": 128000 } },
-        "gpt-6.1-sol-fast": { "limit": { "context": 200000, "input": 200000, "output": 128000 } }
+        "gpt-6.1-sol": { "limit": { "context": 500000, "input": 500000, "output": 128000 } },
+        "gpt-6.1-sol-fast": { "limit": { "context": 500000, "input": 500000, "output": 128000 } }
       }
     },
     "kilo": {
