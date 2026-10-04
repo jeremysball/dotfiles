@@ -45,24 +45,53 @@ CASES = [
     ("pass",  "plain prose",        "nothing to see here"),
 ]
 
+# Code files: only comment text is checked, and ast-grep says what a comment
+# is. Each case is (want, name, filename, content).
+CODE_CASES = [
+    ("pass",  "shell end-of-options", "a.sh", 'gum spin ' + DD + ' "$@"'),
+    ("block", "shell comment",      "a.sh", "true  # a " + DD + " b"),
+    ("pass",  "shell option in string", "a.sh", 'echo "x ' + DD + ' y"'),
+    ("pass",  "fish end-of-options", "a.fish",
+     "set -l x (string escape " + DD + " (commandline -ct))"),
+    ("block", "fish comment",       "a.fish", "# a " + EM + " b"),
+    ("pass",  "bats end-of-options", "a.bats",
+     '@test "x" {\n  run foo ' + DD + ' bar\n}'),
+    ("block", "jsonc comment",      "a.jsonc", '{\n  // a ' + EM + ' b\n  "k": 1\n}'),
+    ("pass",  "jsonc string",       "a.jsonc", '{ "k": "a ' + DD + ' b" }'),
+    ("pass",  "css BEM class",      "a.css", ".block" + DD + "mod { color: red; }"),
+    ("pass",  "python string",      "a.py", 'x = "a ' + EM + ' b"'),
+    ("block", "python comment",     "a.py", "x = 1  # a" + DD + "b"),
+    ("pass",  "shebang shell, no extension", "run",
+     "#!/usr/bin/env bash\nexec foo " + DD + ' "$@"'),
+    ("block", "toml stays prose",   "a.toml", 'x = 1 # a ' + DD + ' b'),
+    ("block", "markdown stays prose", "a.md", "run foo " + DD + " bar"),
+]
 
-def stage_and_run(line, locale):
-    """Stage one line in a throwaway repo and return the hook's exit code."""
+
+def scratch_env(locale):
+    # The scratch repo is its own primary checkout, so the hook's
+    # primary-checkout gate would block every case before the dash gate ran.
+    return dict(
+        os.environ,
+        LC_ALL=locale,
+        LANG=locale,
+        SKIP_PRIMARY_CHECK="1",
+        GIT_AUTHOR_NAME="dash-gate-test",
+        GIT_AUTHOR_EMAIL="dash-gate-test@invalid",
+        GIT_COMMITTER_NAME="dash-gate-test",
+        GIT_COMMITTER_EMAIL="dash-gate-test@invalid",
+    )
+
+
+def stage_and_run(line, locale, name="f.txt"):
+    """Stage `line` as file `name` in a throwaway repo, return the hook's exit code."""
     work = tempfile.mkdtemp()
     try:
-        env = dict(
-            os.environ,
-            LC_ALL=locale,
-            LANG=locale,
-            GIT_AUTHOR_NAME="dash-gate-test",
-            GIT_AUTHOR_EMAIL="dash-gate-test@invalid",
-            GIT_COMMITTER_NAME="dash-gate-test",
-            GIT_COMMITTER_EMAIL="dash-gate-test@invalid",
-        )
+        env = scratch_env(locale)
         subprocess.run(["git", "init", "-q", work], env=env, check=True)
-        with open(os.path.join(work, "f.txt"), "w", encoding="utf-8") as fh:
+        with open(os.path.join(work, name), "w", encoding="utf-8") as fh:
             fh.write(line + "\n")
-        subprocess.run(["git", "-C", work, "add", "f.txt"], env=env, check=True)
+        subprocess.run(["git", "-C", work, "add", name], env=env, check=True)
         done = subprocess.run(
             ["bash", HOOK], cwd=work, env=env, capture_output=True, text=True
         )
@@ -75,15 +104,7 @@ def stage_and_run(line, locale):
 def scratch_repo(lines, locale):
     """Return (work_dir, env) with `lines` staged. Caller removes the dir."""
     work = tempfile.mkdtemp()
-    env = dict(
-        os.environ,
-        LC_ALL=locale,
-        LANG=locale,
-        GIT_AUTHOR_NAME="dash-gate-test",
-        GIT_AUTHOR_EMAIL="dash-gate-test@invalid",
-        GIT_COMMITTER_NAME="dash-gate-test",
-        GIT_COMMITTER_EMAIL="dash-gate-test@invalid",
-    )
+    env = scratch_env(locale)
     subprocess.run(["git", "init", "-q", work], env=env, check=True)
     with open(os.path.join(work, "f.txt"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
@@ -104,7 +125,7 @@ def check_fix_hint():
             return "hook did not block the offending lines"
         printed = blocked.stdout.splitlines() + blocked.stderr.splitlines()
         hint = next((ln.strip() for ln in printed
-                     if ln.strip().startswith("sed -E")), None)
+                     if "sed -E" in ln), None)
         if hint is None:
             return "hook printed no sed hint"
         fixed = subprocess.run("%s f.txt" % hint, cwd=work, env=env,
@@ -151,6 +172,13 @@ def main():
             failures += not ok
             print("  %-4s got=%-5s want=%-5s %s"
                   % ("ok" if ok else "FAIL", got, want, name))
+    print("code files")
+    for want, name, filename, content in CODE_CASES:
+        got = "block" if stage_and_run(content, "en_US.UTF-8", filename) != 0 else "pass"
+        ok = got == want
+        failures += not ok
+        print("  %-4s got=%-5s want=%-5s %s"
+              % ("ok" if ok else "FAIL", got, want, name))
     for name, check in (("printed fix hint", check_fix_hint),
                         ("bypass knobs", check_bypass)):
         problem = check()
@@ -160,8 +188,9 @@ def main():
     if failures:
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
-    print("\ncheck-dash-gate: %d cases pass in %d locales, plus the "
-          "fix hint and every bypass knob" % (len(CASES), len(LOCALES)))
+    print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
+          "plus the fix hint and every bypass knob"
+          % (len(CASES), len(LOCALES), len(CODE_CASES)))
     return 0
 
 

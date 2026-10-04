@@ -7,7 +7,8 @@
 # manual setup.
 #
 # Five jobs, in order:
-#   1. Dash gate: block staged em/en dashes and double-hyphen stand-ins.
+#   1. Dash gate: block staged em/en dashes and double-hyphen stand-ins,
+#      in prose files and in code comments (dash-gate.py).
 #      Override once: git commit --no-verify  or  SKIP_DASH_CHECK=1 git commit.
 #   2. dotfiles adhd-theme guardrail: if the repo has
 #      scripts/check-adhd-themes.sh (i.e. this IS the dotfiles repo), run it
@@ -35,76 +36,17 @@ DEFAULT_REQUIRE_LINKED=true
 
 # --- 1. dash gate ---
 # The em dash is only the most obvious form. The same prose shape arrives as an
-# en dash, a horizontal bar, or a double hyphen standing in for one, and a model
-# that knows the gate exists reaches for those next.
-#
-# Blocked, because these are prose:
-#   two hyphens with whitespace on both sides, the plain em-dash stand-in
-#   two hyphens tight between two alphanumerics, the typewriter em dash
-#   the em dash, en dash, and horizontal bar characters themselves
-#
-# Not blocked, because these are real syntax:
-#   --flag          a long option
-#   word --word     space on the left only, reads as an option
-#   word--          nothing on the right, reads as a decrement
-#   ---             frontmatter, a markdown rule, a table separator row
-#   <!-- -->        an HTML/markdown comment
-#
-# The whole match runs under LC_ALL=C so it behaves identically on every
-# machine: the dash characters are compared as raw bytes, and [[:space:]] and
-# [[:alnum:]] stay ASCII-only. Building the dash bytes with printf '\xNN'
-# rather than bash's $'\uXXXX' matters for the same reason. Under a C locale
-# bash cannot encode the escape and emits its six literal characters instead,
-# which would both miss every real dash and block any line containing that
-# ASCII text.
+# en dash, a horizontal bar, or a double hyphen standing in for one. The rules
+# and the file handling live in dash-gate.py next to this hook: prose files are
+# checked line by line, code files only in their comments (ast-grep decides
+# what a comment is), so a shell end-of-options double hyphen is not a dash.
+# Resolve through the symlink: [dotfiles] links this hook into
+# ~/.config/git/hooks, and dash-gate.py sits beside the real file.
 if [ "${SKIP_DASH_CHECK:-}" = "1" ] || [ "${SKIP_EMDASH_CHECK:-}" = "1" ] \
   || [ "${SKIP_EMDASH:-}" = "1" ]; then
   :
 else
-  em_dash="$(printf '\xe2\x80\x94')"     # U+2014 em dash
-  en_dash="$(printf '\xe2\x80\x93')"     # U+2013 en dash
-  bar_dash="$(printf '\xe2\x80\x95')"    # U+2015 horizontal bar
-
-  # Characters that render as a space but are not one. Folded to a plain space
-  # before matching, so padding a double hyphen with them is not an escape.
-  nbsp="$(printf '\xc2\xa0')"            # U+00A0 no-break space
-  nnbsp="$(printf '\xe2\x80\xaf')"       # U+202F narrow no-break space
-  figsp="$(printf '\xe2\x80\x87')"       # U+2007 figure space
-
-  dash_re="$em_dash|$en_dash|$bar_dash|[[:space:]]--[[:space:]]|[[:alnum:]]--[[:alnum:]]"
-
-  # Added lines only. Drop the "+++ b/path" file header, but keep every other
-  # line starting with '+' so a markdown "+ " bullet is still inspected.
-  added="$(git diff --cached --unified=0 --no-color 2>/dev/null \
-    | LC_ALL=C grep -E '^\+' \
-    | LC_ALL=C grep -v '^+++ ' \
-    | sed -e 's/^+//' -e "s/$nbsp/ /g" -e "s/$nnbsp/ /g" -e "s/$figsp/ /g" || true)"
-
-  # A herestring, not `printf | grep -q`. grep -q exits on the first match,
-  # printf then dies of SIGPIPE, and pipefail promotes that 141 to the
-  # pipeline's status, which the `if` reads as "no match". The gate silently
-  # stopped firing on exactly the diffs most likely to carry a stray dash:
-  # measured, a 2.4MB input with an em dash on line 1 reported no match.
-  if LC_ALL=C grep -Eq "$dash_re" <<<"$added"; then
-    echo "pre-commit: dash blocked. Staged changes contain an em/en dash or a double-hyphen stand-in." >&2
-    echo "" >&2
-    echo "Fix it, then stage again:" >&2
-    # The fold has to lead. The gate normalises no-break spaces to a plain
-    # space before matching, so a hint that skips that step leaves an
-    # NBSP-padded double hyphen looking repaired and still blocked.
-    printf '  LC_ALL=C sed -E "s/%s/ /g; s/%s/ /g; s/%s/ /g; s/ *[%s%s%s] */, /g; s/[[:space:]]--[[:space:]]/, /g; s/([[:alnum:]])--([[:alnum:]])/\\1, \\2/g"\n' \
-      "$nbsp" "$nnbsp" "$figsp" "$em_dash" "$en_dash" "$bar_dash" >&2
-    echo "" >&2
-    LC_ALL=C grep -E "$dash_re" <<<"$added" | head -n 20 | sed 's/^/  /' >&2 || true
-    echo "" >&2
-    echo "Replace it with a comma, period, or colon. Keep related words together." >&2
-    echo "" >&2
-    echo "The double-hyphen rules also match some legitimate code: a BEM class" >&2
-    echo "name (block--modifier) and a markdown table separator padded with" >&2
-    echo "spaces (| -- |) both look like a dash stand-in. Bypass those." >&2
-    echo "Bypass once: git commit --no-verify  or  SKIP_DASH_CHECK=1 git commit" >&2
-    exit 1
-  fi
+  python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/dash-gate.py"
 fi
 
 # --- 2. dotfiles adhd-theme guardrail (repo-dispatched) ---
