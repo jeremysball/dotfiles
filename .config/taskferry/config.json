@@ -1,5 +1,5 @@
 {
-  "summaryModel": "opencode/mimo-v2.5-free",
+  "summaryModel": "opencode/muse-spark-1.3-contributor-free",
   "defaultExecutor": "opencode",
   "maxConcurrentTasks": 32,
   "postOutputNoOutputTimeoutMs": 900000,
