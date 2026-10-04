@@ -14,7 +14,7 @@
       "maxConcurrentTasks": 3
     },
     "opencode": {
-      "maxConcurrentTasks": 2
+      "maxConcurrentTasks": 4
     },
     "nanogpt": {
       "maxConcurrentTasks": 6
