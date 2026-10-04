@@ -5,6 +5,7 @@
   "postOutputNoOutputTimeoutMs": 900000,
   "envFile": "/run/user/1000/secrets/global.env",
   "profilingEnabled": true,
+  "restartWaitForIdle": true,
   "providerLimits": {
     "cheapestinference": {
       "maxConcurrentTasks": 1
