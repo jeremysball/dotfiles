@@ -14,6 +14,23 @@ if test -d /home/linuxbrew/.linuxbrew/bin; and not contains -- /home/linuxbrew/.
     fish_add_path --global --prepend /home/linuxbrew/.linuxbrew/bin
 end
 
+# Userspace CUDA toolkit (NVIDIA redist tarballs, installed without sudo on
+# sisyphus). nvcc 12.8 rejects gcc > 14, so a conda-forge gcc 14 sits beside it
+# and NVCC_CCBIN points nvcc at it. No-op on any machine without these dirs.
+# Not gated on is-interactive: builds that need nvcc (uv pip install of
+# llama-cpp-python, `fish -c` scripts) run in non-interactive shells.
+set -l cuda_base (set -q XDG_DATA_HOME; and echo $XDG_DATA_HOME; or echo $HOME/.local/share)/cuda
+if test -x $cuda_base/12.8/bin/nvcc
+    fish_add_path --global --append --path $cuda_base/12.8/bin
+    set -l cuda_ccbin $cuda_base/gcc14/bin/x86_64-conda-linux-gnu-g++
+    if test -x $cuda_ccbin
+        set -gx NVCC_CCBIN $cuda_ccbin
+    else if status is-interactive
+        # Without it nvcc falls back to the system gcc, which 12.8 rejects.
+        echo "00-path: nvcc found but $cuda_ccbin is missing; NVCC_CCBIN not set" >&2
+    end
+end
+
 # go-installed tools (bumblebee, catbow fallback, etc.) — only needed interactively
 if status is-interactive
     fish_add_path --global --append --path $HOME/go/bin
