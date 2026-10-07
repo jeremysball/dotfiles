@@ -2,6 +2,7 @@
   "summaryModel": "opencode/muse-spark-1.3-contributor-free",
   "defaultExecutor": "opencode",
   "maxConcurrentTasks": 32,
+  "noOutputTimeoutMs": 900000,
   "postOutputNoOutputTimeoutMs": 900000,
   "envFile": "/run/user/1000/secrets/global.env",
   "profilingEnabled": true,
@@ -18,6 +19,9 @@
     },
     "nanogpt": {
       "maxConcurrentTasks": 6
+    },
+    "llmgateway": {
+      "maxConcurrentTasks": 2
     }
   }
 }
