@@ -144,16 +144,16 @@ def check_fix_hint():
         shutil.rmtree(work, ignore_errors=True)
 
 
-def check_bypass():
-    """Each documented override has to actually let the commit through."""
+def check_no_bypass():
+    """The removed env hatches must not let the commit through."""
     work, env = scratch_repo(["prose " + EM + " more"], "en_US.UTF-8")
     try:
         for knob in ("SKIP_DASH_CHECK", "SKIP_EMDASH_CHECK", "SKIP_EMDASH"):
             done = subprocess.run(["bash", HOOK], cwd=work,
                                   env=dict(env, **{knob: "1"}),
                                   capture_output=True, text=True)
-            if done.returncode != 0:
-                return "%s=1 did not bypass the gate" % knob
+            if done.returncode == 0:
+                return "%s=1 still bypasses the gate" % knob
         return None
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -180,7 +180,7 @@ def main():
         print("  %-4s got=%-5s want=%-5s %s"
               % ("ok" if ok else "FAIL", got, want, name))
     for name, check in (("printed fix hint", check_fix_hint),
-                        ("bypass knobs", check_bypass)):
+                        ("bypass knobs inert", check_no_bypass)):
         problem = check()
         failures += problem is not None
         print("%-4s %s%s" % ("ok" if problem is None else "FAIL", name,
@@ -189,7 +189,7 @@ def main():
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
     print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
-          "plus the fix hint and every bypass knob"
+          "plus the fix hint and the inert bypass knobs"
           % (len(CASES), len(LOCALES), len(CODE_CASES)))
     return 0
 

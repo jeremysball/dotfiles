@@ -277,7 +277,7 @@ def main(argv=None):
         hits = find_hits(args.fish_parser)
     except GateError as exc:
         print("pre-commit: dash gate could not run: %s" % exc, file=sys.stderr)
-        print("Bypass once: git commit --no-verify  or  SKIP_DASH_CHECK=1 git commit",
+        print("No bypass for this gate; fix the cause above and retry.",
               file=sys.stderr)
         return 2
     if not hits:
@@ -308,8 +308,7 @@ def main(argv=None):
     print("", file=err)
     print("Prose rules still match a markdown table separator padded with spaces"
           " (| %s |). Bypass that." % DD, file=err)
-    print("Bypass once: git commit --no-verify  or  SKIP_DASH_CHECK=1 git commit",
-          file=err)
+    print("No bypass for this gate; fix the flagged line.", file=err)
     return 1
 
 

@@ -9,7 +9,7 @@
 # Six jobs, in order:
 #   1. Dash gate: block staged em/en dashes and double-hyphen stand-ins,
 #      in prose files and in code comments (dash-gate.py).
-#      Override once: git commit --no-verify  or  SKIP_DASH_CHECK=1 git commit.
+#      No bypass, by user directive 2026-10-11: fix the flagged line.
 #   2. Hardcoded absolute path gate: block a staged code line that hardcodes
 #      /home/..., /workspace/..., a username, or a hostname, per CLAUDE.md's
 #      "Avoid hardcoded absolute paths" rule. Override once: git commit --no-verify.
@@ -44,12 +44,9 @@ DEFAULT_REQUIRE_LINKED=true
 # what a comment is), so a shell end-of-options double hyphen is not a dash.
 # Resolve through the symlink: [dotfiles] links this hook into
 # ~/.config/git/hooks, and dash-gate.py sits beside the real file.
-if [ "${SKIP_DASH_CHECK:-}" = "1" ] || [ "${SKIP_EMDASH_CHECK:-}" = "1" ] \
-  || [ "${SKIP_EMDASH:-}" = "1" ]; then
-  :
-else
-  python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/dash-gate.py"
-fi
+# The SKIP_DASH_CHECK family of env hatches was removed 2026-10-11 by user
+# directive ("no more bypassing the gate"), so the gate always runs.
+python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/dash-gate.py"
 
 # --- 2. hardcoded absolute path gate ---
 # ~/.claude/CLAUDE.md's "Avoid hardcoded absolute paths" rule, mechanised. The
