@@ -69,18 +69,35 @@ CODE_CASES = [
 
 
 def scratch_env(locale):
+    # GIT_CONFIG_NOSYSTEM keeps the scratch repo off any system-level config.
     # The scratch repo is its own primary checkout, so the hook's
     # primary-checkout gate would block every case before the dash gate ran.
+    # The removed SKIP_PRIMARY_CHECK knob is gone, so the scratch repo
+    # declares itself exempt the one documented way: the repo-local
+    # worktree.requireLinked config key (docs/things-that-look-like-bugs.md),
+    # written in stage_and_run right after init.
     return dict(
         os.environ,
         LC_ALL=locale,
         LANG=locale,
-        SKIP_PRIMARY_CHECK="1",
+        GIT_CONFIG_NOSYSTEM="1",
         GIT_AUTHOR_NAME="dash-gate-test",
         GIT_AUTHOR_EMAIL="dash-gate-test@invalid",
         GIT_COMMITTER_NAME="dash-gate-test",
         GIT_COMMITTER_EMAIL="dash-gate-test@invalid",
     )
+
+
+def exempt_scratch(work, env):
+    """Exempt a scratch repo from the primary-checkout gate.
+
+    The scratch repo is its own primary checkout, so without this the gate
+    blocks every case before the dash gate runs. This is the one documented
+    way: the repo-local config key (docs/things-that-look-like-bugs.md). The
+    SKIP_PRIMARY_CHECK knob that used to do this job was removed 2026-10-11.
+    """
+    subprocess.run(["git", "-C", work, "config", "worktree.requireLinked",
+                    "false"], env=env, check=True)
 
 
 def stage_and_run(line, locale, name="f.txt"):
@@ -89,6 +106,7 @@ def stage_and_run(line, locale, name="f.txt"):
     try:
         env = scratch_env(locale)
         subprocess.run(["git", "init", "-q", work], env=env, check=True)
+        exempt_scratch(work, env)
         with open(os.path.join(work, name), "w", encoding="utf-8") as fh:
             fh.write(line + "\n")
         subprocess.run(["git", "-C", work, "add", name], env=env, check=True)
@@ -106,6 +124,7 @@ def scratch_repo(lines, locale):
     work = tempfile.mkdtemp()
     env = scratch_env(locale)
     subprocess.run(["git", "init", "-q", work], env=env, check=True)
+    exempt_scratch(work, env)
     with open(os.path.join(work, "f.txt"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
     subprocess.run(["git", "-C", work, "add", "f.txt"], env=env, check=True)
@@ -159,6 +178,33 @@ def check_no_bypass():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def check_no_primary_bypass():
+    """The primary gate's removed env knobs must not let a commit through.
+
+    Deliberately NOT exempt: the scratch repo carries no requireLinked key,
+    so the primary-checkout gate blocks. That blocked state is exactly what
+    SKIP_PRIMARY_CHECK and GIT_REQUIRE_LINKED_WORKTREE used to override.
+    """
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env("en_US.UTF-8")
+        subprocess.run(["git", "init", "-q", work], env=env, check=True)
+        with open(os.path.join(work, "f.txt"), "w", encoding="utf-8") as fh:
+            fh.write("clean prose\n")
+        subprocess.run(["git", "-C", work, "add", "f.txt"], env=env, check=True)
+        for knob in ("SKIP_PRIMARY_CHECK", "GIT_REQUIRE_LINKED_WORKTREE"):
+            done = subprocess.run(["bash", HOOK], cwd=work,
+                                  env=dict(env, **{knob: "1"}),
+                                  capture_output=True, text=True)
+            if done.returncode == 0:
+                return "%s=1 still bypasses the primary-checkout gate" % knob
+            if "SKIP_" in done.stderr or "GIT_REQUIRE_LINKED" in done.stderr:
+                return "blocked message still advertises the %s knob" % knob
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def main():
     if not os.path.isfile(HOOK):
         print("check-dash-gate: no hook at %s" % HOOK, file=sys.stderr)
@@ -180,7 +226,9 @@ def main():
         print("  %-4s got=%-5s want=%-5s %s"
               % ("ok" if ok else "FAIL", got, want, name))
     for name, check in (("printed fix hint", check_fix_hint),
-                        ("bypass knobs inert", check_no_bypass)):
+                        ("bypass knobs inert", check_no_bypass),
+                        ("primary-gate knobs inert",
+                         check_no_primary_bypass)):
         problem = check()
         failures += problem is not None
         print("%-4s %s%s" % ("ok" if problem is None else "FAIL", name,
@@ -189,7 +237,7 @@ def main():
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
     print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
-          "plus the fix hint and the inert bypass knobs"
+          "plus the fix hint and the inert dash and primary bypass knobs"
           % (len(CASES), len(LOCALES), len(CODE_CASES)))
     return 0
 
