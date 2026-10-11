@@ -16,7 +16,13 @@ Two layers of guard, because they fail differently:
   * a source scan for the functional knob pattern (a shell parameter
     expansion that reads the env var) and for the three phrases a hook can
     use to hand out a bypass. Comments naming a removed knob are expected
-    and allowed, so the scan matches the expansion, not the bare name.
+    and allowed, so the scan matches the expansion, not the bare name. The
+    scan reads the whole hooks directory rather than a list of files: a
+    hand-listed tuple shipped in the first version missed
+    abs-path-gate.py, whose "Skip once with --no-verify" stayed live in the
+    very message this file exists to end, and the scan reported the
+    directory clean. A guard that can only see what it was told to see is
+    a guard that will be wrong again.
   * behavioral runs of the real hooks over throwaway repos, asserting that
     a knob cannot buy a pass and that a blocked message stays clean.
 
@@ -38,11 +44,26 @@ HOOKS = os.path.join(ROOT, ".config", "git", "hooks")
 PRE_COMMIT = os.path.join(HOOKS, "pre-commit")
 COMMIT_MSG = os.path.join(HOOKS, "commit-msg")
 PRE_PUSH = os.path.join(HOOKS, "pre-push")
-# dash-gate.py is a helper pre-commit calls rather than a hook, but it is
-# part of the same gate surface and prints the same messages, so it is
-# scanned too.
-HOOK_FILES = (PRE_COMMIT, COMMIT_MSG, PRE_PUSH,
-              os.path.join(HOOKS, "dash-gate.py"))
+
+
+def hook_sources():
+    """Every file in the hooks directory, in a stable order.
+
+    Scanned as a directory rather than a hand-listed tuple on purpose. The
+    tuple missed abs-path-gate.py, which kept its "Skip once with
+    --no-verify" advertisement while the guard reported the directory
+    clean. A new gate file arrives here automatically instead of needing to
+    be added to two places. Editor leftovers are skipped: they are not
+    deployed, so they cannot advertise anything to a reader.
+    """
+    skip = (".swp", ".swo", "~")
+    return sorted(
+        os.path.join(HOOKS, name)
+        for name in os.listdir(HOOKS)
+        if not name.startswith(".")
+        and not name.endswith(skip)
+        and os.path.isfile(os.path.join(HOOKS, name))
+    )
 
 LOCALES = ("en_US.UTF-8", "C")
 EM = chr(0x2014)
@@ -152,12 +173,9 @@ def advertises(stderr):
 
 
 def check_source_scan():
-    """No hook expands a bypass knob, and none prints one."""
+    """No hook source expands a bypass knob, and none prints one."""
     problems = []
-    for path in HOOK_FILES:
-        if not os.path.isfile(path):
-            problems.append("missing %s" % os.path.relpath(path, ROOT))
-            continue
+    for path in hook_sources():
         with open(path, encoding="utf-8") as fh:
             for lineno, text in enumerate(fh, 1):
                 rel = os.path.relpath(path, ROOT)
@@ -269,6 +287,40 @@ def budget_scratch():
 REF_LINE = "refs/heads/main 0000000000000000000000000000000000000000 " \
            "0000000000000000000000000000000000000000\n"
 
+# Assembled rather than written out. This file is a code file, and the
+# abs-path gate scans added lines of code files, so a literal home
+# directory in this source would block the very commit that adds the guard
+# for that message. Same reason check-dash-gate.py builds its dashes from
+# codepoints.
+ABS_PATH_LITERAL = "BASE = /" + "/".join(("home", "example", "app"))
+
+
+def check_abs_path_message():
+    """The abs-path gate must block, and its message must name no way out.
+
+    No env knob here; this check exists because the gate's blocked message
+    shipped the last surviving "Skip once with --no-verify" in the hooks
+    directory, on a day when the source scan above had already been
+    merged, passed, and reported the directory clean. It had missed the
+    file because it scanned a hand-listed tuple of four names.
+    """
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env()
+        init_repo(work, env)
+        stage(work, env, ABS_PATH_LITERAL, name="f.py")
+        done = run(PRE_COMMIT, env, work)
+        if done.returncode == 0:
+            return "abs-path gate let a hardcoded path through unflagged"
+        if "hardcoded absolute path" not in done.stderr:
+            return "abs-path gate did not fire; something else blocked first"
+        bad = advertises(done.stderr)
+        if bad:
+            return "abs-path gate blocked, but %s" % bad
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
 
 def check_push_budget_knobs():
     """The pre-push budget knob must not buy a pass, and its block is clean."""
@@ -329,6 +381,7 @@ CHECKS = (
     ("primary-gate knobs inert", check_primary_knobs),
     ("worktree-budget knob inert", check_push_budget_knobs),
     ("commit-msg block clean", check_commit_msg_clean),
+    ("abs-path block clean", check_abs_path_message),
 )
 
 
@@ -347,8 +400,9 @@ def main():
         print("\ncheck-hook-knobs: %d failure(s)" % failures, file=sys.stderr)
         return 1
     print("\ncheck-hook-knobs: %d hook sources clean, %d knobs inert across "
-          "the dash, primary, and worktree-budget gates, blocked messages "
-          "name no escape hatch" % (len(HOOK_FILES), len(BYPASS_VALUES)))
+          "the dash, primary, and worktree-budget gates, and every blocked "
+          "message names no escape hatch" % (len(hook_sources()),
+                                             len(BYPASS_VALUES)))
     return 0
 
 

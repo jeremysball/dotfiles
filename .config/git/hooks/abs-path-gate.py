@@ -56,8 +56,8 @@ def main():
         sys.exit(
             "hardcoded absolute path on an added code line:\n  "
             + "\n  ".join(sorted(set(bad)))
-            + "\nMake it relative or resolve it from an env var."
-              " Skip once with --no-verify if the literal is the point."
+            + "\nNo bypass for this gate; make the line relative or resolve"
+              " it from an env var."
         )
     print("abs-path gate: clean")
 
