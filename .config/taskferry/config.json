@@ -20,7 +20,7 @@
       "maxConcurrentTasks": 6
     },
     "llmgateway": {
-      "maxConcurrentTasks": 4
+      "maxConcurrentTasks": 8
     }
   }
 }
