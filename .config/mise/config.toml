@@ -120,6 +120,15 @@ ast-grep = "0.44.1"
 # same `KernelClient` rename break on its own `colab exec`/kernel commands.
 "pipx:google-colab-cli" = { version = "latest", uvx_args = "--with jupyter-kernel-client==0.9.0" }
 
+# Empryo installs to ~/.empryo/bin via its upstream installer (sha256-verified
+# against the signed SHA256SUMS). mise doesn't manage it: the upstream repo
+# is named SoulForge so its GitHub release assets are `soulforge-*`, and
+# ubi/aqua would name the resulting binary `soulforge` instead of `empryo`.
+# Run once per machine after `init.sh`; rerun to upgrade.
+[tasks.install-empryo]
+description = "Install or upgrade Empryo (graph-powered coding agent) via its upstream sha256-verified installer"
+run = "curl -fsSL https://empryo.com/install.sh | bash"
+
 [settings]
 # Read .nvmrc / .python-version / .go-version in repos that never heard of mise
 idiomatic_version_file_enable_tools = ["node", "python", "go"]
