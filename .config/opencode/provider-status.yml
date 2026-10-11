@@ -12,6 +12,7 @@ ollama: true
 openai: true
 openrouter: true
 nanogpt: true
+llmgateway: true
 
 minimax: false
 opencode-go: false

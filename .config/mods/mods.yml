@@ -1,7 +1,11 @@
 # OpenAI compatible REST API (openai, localai, anthropic, ...)
-default-api: ollama-cloud
+default-api: llmgateway
 # Default model (gpt-3.5-turbo, gpt-4, ggml-gpt4all-j...)
-default-model: "deepseek-v4-flash:0731"
+# Switched 2026-10-08 (user directive) to llmgateway/mimo-v2.6-pro when the
+# ollama-cloud default deepseek-v4-flash:0731 was retired upstream
+# (2026-09-25) and the whole Ollama Cloud route went behind the Pro plan.
+# Keep in sync with the opencode/kilo root `model` in the dotfiles fleet.
+default-model: "mimo-v2.6-pro"
 # Text to append when using the -f flag
 format-text:
   markdown: 'Format the response as markdown without enclosing backticks.'
@@ -92,6 +96,17 @@ apis:
       deepseek-v4-pro:
         aliases: ["dspro"]
         max-input-chars: 1225000
+  # LLM Gateway (llmgateway.io) — OpenAI-compatible aggregator. Fleet default
+  # route since 2026-10-08 (see default-model above). Same endpoint and key
+  # the opencode and kilo llmgateway provider blocks use.
+  llmgateway:
+    base-url: https://api.llmgateway.io/v1
+    api-key:
+    api-key-env: LLM_GATEWAY_API_KEY
+    models:
+      mimo-v2.6-pro:
+        aliases: ["mimo"]
+        max-input-chars: 1400000
   openrouter:
     base-url: https://openrouter.ai/api/v1
     api-key:

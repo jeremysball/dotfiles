@@ -68,7 +68,14 @@ DOTFILES_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # default, a fallback, or a dispatch target on our own initiative. Removing
 # it from a catalog is the opposite of the requirement, not a stricter form
 # of it — an unregistered model cannot be requested.
-REQUEST_ONLY_PATTERNS=("deepseek-v4-pro" "nanogpt/")
+REQUEST_ONLY_PATTERNS=("deepseek-v4-pro" "nanogpt/" "llmgateway/")
+
+# Models promoted out of request-only by explicit user directive. 2026-10-08:
+# llmgateway/mimo-v2.6-pro became the fleet default (opencode and kilo root
+# `model`) when the ollama-cloud default deepseek-v4-flash:0731 was retired
+# upstream. This is the only exemption; every other model matching the
+# patterns above stays request-only.
+REQUEST_ONLY_EXEMPT=("llmgateway/mimo-v2.6-pro")
 
 # Which harnesses must actually register each request-only pattern. nanogpt
 # is opencode+kilo only (pi carries no nanogpt provider, same "-" as in
@@ -77,10 +84,14 @@ REQUEST_ONLY_PATTERNS=("deepseek-v4-pro" "nanogpt/")
 REQUEST_ONLY_REGISTRY=(
   "deepseek-v4-pro|pi opencode kilo"
   "nanogpt/|opencode kilo"
+  "llmgateway/|opencode kilo"
 )
 
 is_request_only() {
-  local model="$1" pat
+  local model="$1" pat ex
+  for ex in "${REQUEST_ONLY_EXEMPT[@]}"; do
+    [[ "$model" == "$ex" ]] && return 1
+  done
   for pat in "${REQUEST_ONLY_PATTERNS[@]}"; do
     [[ "$model" == *"$pat"* ]] && return 0
   done
@@ -147,14 +158,34 @@ PROVIDER_SPECS=(
   "cheapestinference|cheapestinference|cheapestinference|-"
   "meta|meta|meta|meta"
   "nanogpt|-|nanogpt|nanogpt"
+  # LLM Gateway (llmgateway.io), added 2026-10-06 on opencode and ported to
+  # kilo 2026-10-08. Pay-per-request aggregator with a finite balance, so it
+  # is REQUEST-ONLY like nanogpt (see REQUEST_ONLY_PATTERNS). pi carries no
+  # llmgateway provider, same "-" as nanogpt.
+  "llmgateway|-|llmgateway|llmgateway"
   # pi reaches OpenAI through its built-in openai-codex provider, whose
-  # catalog no dotfiles config controls, so only opencode and kilo compare.
-  "openai|-|openai|openai"
+  # catalog no dotfiles config controls. opencode-vs-kilo used to compare
+  # here; moved to CATALOG_ONLY_PROVIDERS 2026-10-08 (see the comment
+  # there) — the two harnesses are on different ChatGPT accounts, so their
+  # openai catalogs diverge by entitlement, not by anything we configure.
 )
 BUILTIN_PROVIDERS=()
-# Live, but each harness bundles its own upstream catalog snapshot and no
-# dotfiles config shapes it, so there is nothing of ours to compare.
-CATALOG_ONLY_PROVIDERS=("openrouter")
+# Live, but each harness's porcelain reflects an upstream catalog that no
+# dotfiles config can shape, so there is nothing of ours to compare.
+#   openrouter — each harness bundles its own models.dev snapshot.
+#   openai     — opencode and kilo are signed into DIFFERENT ChatGPT
+#                accounts (auth.json accountId dde27696-… vs 26c790f4-…),
+#                and each porcelain lists only what its own account can
+#                serve. Verified 2026-10-08 that config cannot close the
+#                gap: the gpt-5.4 family declared in config never reaches
+#                `opencode models` porcelain, and `opencode run --model
+#                openai/gpt-5.4` answers "Model unavailable" while kilo
+#                dispatches the same id on its own account. Strict equality
+#                can only pass here by unifying the accounts — until then a
+#                check would fail on entitlement, not on our config. Move
+#                openai back into PROVIDER_SPECS once both harnesses share
+#                one account.
+CATALOG_ONLY_PROVIDERS=("openrouter" "openai")
 
 # Liveness comes from provider-status.yml, the one record of which
 # providers are dispatchable. false = dead: skip parity, warn if present.
@@ -337,9 +368,14 @@ def load_jsonc(path):
         i += 1
     return json.loads(re.sub(r",(\s*[}\]])", r"\1", "".join(out)))
 
-PATTERNS = ("deepseek-v4-pro", "nanogpt/")
+PATTERNS = ("deepseek-v4-pro", "nanogpt/", "llmgateway/")
+# Kept in sync with REQUEST_ONLY_EXEMPT in the bash half: promoted to fleet
+# default 2026-10-08 by user directive, see that comment for the history.
+EXEMPT = ("llmgateway/mimo-v2.6-pro",)
 
 def is_request_only(model):
+    if model in EXEMPT:
+        return False
     return any(p in model for p in PATTERNS)
 
 # (label, path, list of dotted paths to a model id)

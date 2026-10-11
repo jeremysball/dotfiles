@@ -1,9 +1,13 @@
 /**
- * Meta parity: ensures every contributor-tier model is listed.
+ * Meta parity: ensures every fleet-tier model is listed.
  * Pi's built-in meta catalog hides contributor models despite
  * settings.json modelOverrides; this extension registers them
- * explicitly so pi --list-models matches opencode's 4-model fleet.
- * Keep in sync with opencode.jsonc provider.meta and verify-provider-parity.sh
+ * explicitly so pi --list-models matches the opencode/kilo fleet.
+ * muse-spark-1.3 reached the fleet 2026-10-07 via models.dev's meta
+ * catalog merge on opencode/kilo (which add to the built-in provider
+ * instead of replacing it); pi replaces it here, so the model must be
+ * explicit. Keep in sync with opencode.jsonc provider.meta and
+ * verify-provider-parity.sh.
  */
 export default function (pi) {
   // Register meta with full fleet: pi's built-in catalog plus both
@@ -37,6 +41,15 @@ export default function (pi) {
         {
           id: "muse-spark-1.2-contributor",
           name: "Muse Spark 1.2 Contributor",
+          reasoning: true,
+          input: ["text", "image", "pdf", "video"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 200000,
+          maxTokens: 131072,
+        },
+        {
+          id: "muse-spark-1.3",
+          name: "Muse Spark 1.3",
           reasoning: true,
           input: ["text", "image", "pdf", "video"],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
