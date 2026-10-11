@@ -121,6 +121,9 @@ def decode(raw):
 def added_lines():
     """{path: {lineno: text}} for every line the index adds over HEAD."""
     diff = decode(git("-c", "core.quotePath=false", "diff", "--cached",
+                      # A gitlink diffs as "+Subproject commit <sha>", which is
+                      # no prose, and `git show :<gitlink>` cannot read it.
+                      "--ignore-submodules=all",
                       "--unified=0", "--no-color", "--no-ext-diff",
                       "--src-prefix=a/", "--dst-prefix=b/"))
     files, path, lineno = {}, None, 0

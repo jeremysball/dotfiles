@@ -159,6 +159,24 @@ def check_bypass():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def check_gitlink():
+    """A staged submodule pointer carries no prose; the gate must pass it."""
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env("en_US.UTF-8")
+        subprocess.run(["git", "init", "-q", work], env=env, check=True)
+        sha = "1" * 40
+        subprocess.run(["git", "-C", work, "update-index", "--add",
+                        "--cacheinfo", "160000,%s,sub" % sha], env=env, check=True)
+        done = subprocess.run(["bash", HOOK], cwd=work, env=env,
+                              capture_output=True, text=True)
+        if done.returncode != 0:
+            return "staged gitlink blocked: %s" % done.stderr.strip()[:200]
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def main():
     if not os.path.isfile(HOOK):
         print("check-dash-gate: no hook at %s" % HOOK, file=sys.stderr)
@@ -180,7 +198,8 @@ def main():
         print("  %-4s got=%-5s want=%-5s %s"
               % ("ok" if ok else "FAIL", got, want, name))
     for name, check in (("printed fix hint", check_fix_hint),
-                        ("bypass knobs", check_bypass)):
+                        ("bypass knobs", check_bypass),
+                        ("staged gitlink", check_gitlink)):
         problem = check()
         failures += problem is not None
         print("%-4s %s%s" % ("ok" if problem is None else "FAIL", name,
