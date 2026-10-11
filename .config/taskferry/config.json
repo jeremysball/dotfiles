@@ -18,6 +18,9 @@
     },
     "nanogpt": {
       "maxConcurrentTasks": 6
+    },
+    "llmgateway": {
+      "maxConcurrentTasks": 4
     }
   }
 }
