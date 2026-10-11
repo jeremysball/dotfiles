@@ -42,7 +42,10 @@
 #   git config worktree.auditBin   config key
 #   DEFAULT_AUDIT_BIN              built-in default, below
 #
-# Bypass once: git push --no-verify  or  SKIP_WORKTREE_BUDGET=1 git push
+# No bypass, by user directive 2026-10-11: the SKIP_WORKTREE_BUDGET knob was
+# removed and the blocked message no longer offers one. Raise the cap (the
+# env/config triplet above) if this repo really runs wide; draining is the
+# fix for everything else.
 set -euo pipefail
 
 DEFAULT_MAX_WORKTREES=3
@@ -56,8 +59,6 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
 
 # --- 1. worktree budget ---
 check_worktree_budget() {
-  [ "${SKIP_WORKTREE_BUDGET:-}" = "1" ] && return 0
-
   # Not a worktree-capable context (bare repo, submodule push, etc.).
   git rev-parse --show-toplevel >/dev/null 2>&1 || return 0
 
@@ -172,7 +173,6 @@ check_worktree_budget() {
     echo "  git config worktree.maxOpen <n>        # persistent, this repo"
     echo "  GIT_MAX_WORKTREES=<n> git push         # one push"
     echo ""
-    echo "Bypass once: git push --no-verify  or  SKIP_WORKTREE_BUDGET=1 git push"
     if [ "$pruned" -gt 0 ]; then
       echo "($pruned registered worktree(s) are already gone from disk;"
       echo " 'git worktree prune' clears the registrations, but they were"

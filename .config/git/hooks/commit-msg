@@ -12,7 +12,7 @@
 #      the user's name may carry a Claude-Session trailer, a session URL, a
 #      Co-Authored-By: Claude trailer, or a Generated-with footer.
 #   2. Require a Conventional Commits subject line.
-# Bypass once: git commit --no-verify
+# No bypass, by user directive 2026-10-11: fix the message and commit again.
 set -euo pipefail
 
 msg_file="${1:?commit-msg: no message file given}"
@@ -27,10 +27,10 @@ fail() { echo "commit-msg: blocked. $1" >&2; exit 1; }
 
 for banned in "Claude-Session:" "claude.ai/code/session_" "Co-Authored-By: Claude" "Generated with [Claude"; do
   if grep -qF "$banned" "$msg_file"; then
-    fail "message contains '$banned'. Strip AI-credit trailers and session links, then commit again (bypass once: git commit --no-verify)."
+    fail "message contains '$banned'. Strip AI-credit trailers and session links, then commit again."
   fi
 done
 
 if ! printf '%s' "$subject" | grep -qE '^(feat|fix|chore|docs|refactor|test|style|perf|build|ci)(\(.+\))?(!)?: .+'; then
-  fail "subject '$subject' is not Conventional Commits (type(scope): description). Use feat, fix, chore, docs, refactor, test, style, perf, build, or ci (bypass once: git commit --no-verify)."
+  fail "subject '$subject' is not Conventional Commits (type(scope): description). Use feat, fix, chore, docs, refactor, test, style, perf, build, or ci."
 fi

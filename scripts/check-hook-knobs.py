@@ -1,0 +1,356 @@
+#!/usr/bin/env python3
+"""Assert the global git hooks honor no bypass knob and advertise none.
+
+The dash gate, the primary-checkout gate, and the pre-push worktree-budget
+gate each shipped an env knob, and two of the three printed that knob (or
+--no-verify) in their own blocked message. A RED/GREEN probe on 2026-10-11
+found three of six unguided agents reached for SKIP_PRIMARY_CHECK when
+handed a routine commit task, because the hook's own error offered it; one
+of those had set it defensively on a commit where no gate had even fired.
+A hook that advertises its own escape hatch teaches it to anything that
+reads the output, so the knobs are gone and the messages no longer name
+one. This script is what keeps them gone.
+
+Two layers of guard, because they fail differently:
+
+  * a source scan for the functional knob pattern (a shell parameter
+    expansion that reads the env var) and for the three phrases a hook can
+    use to hand out a bypass. Comments naming a removed knob are expected
+    and allowed, so the scan matches the expansion, not the bare name.
+  * behavioral runs of the real hooks over throwaway repos, asserting that
+    a knob cannot buy a pass and that a blocked message stays clean.
+
+Every behavioral check first proves its gate blocks with no knob set. A knob
+check that passes because the gate never fired is a hollow check, and the
+baseline is what makes that visible.
+
+Exits non-zero listing every mismatch.
+"""
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOOKS = os.path.join(ROOT, ".config", "git", "hooks")
+PRE_COMMIT = os.path.join(HOOKS, "pre-commit")
+COMMIT_MSG = os.path.join(HOOKS, "commit-msg")
+PRE_PUSH = os.path.join(HOOKS, "pre-push")
+# dash-gate.py is a helper pre-commit calls rather than a hook, but it is
+# part of the same gate surface and prints the same messages, so it is
+# scanned too.
+HOOK_FILES = (PRE_COMMIT, COMMIT_MSG, PRE_PUSH,
+              os.path.join(HOOKS, "dash-gate.py"))
+
+LOCALES = ("en_US.UTF-8", "C")
+EM = chr(0x2014)
+EM_NAME = "em dash"
+
+# The functional knob: a shell parameter expansion that reads the env var.
+# Bare knob names in comments are expected (they document the removal), so
+# match the expansion and not the name.
+KNOB_RE = re.compile(
+    r"\$\{?(SKIP_[A-Z0-9_]+|GIT_REQUIRE_LINKED_WORKTREE)")
+# The three phrases a hook can use to hand out a bypass. All three shipped
+# at some point, and all three taught the escape hatch to whatever read the
+# output. Matched case-insensitively and forbidden outright, including in
+# comments, so "we removed --no-verify" cannot reintroduce the string a
+# later edit might mistake for a live instruction.
+AD_RE = re.compile(r"no-verify|bypass once|override once", re.IGNORECASE)
+# Knob names, for asserting a blocked message does not point at one.
+NAME_RE = re.compile(r"SKIP_[A-Z0-9_]+|GIT_REQUIRE_LINKED_WORKTREE")
+
+# Each knob paired with a value that used to buy a pass. SKIP_* names meant
+# skip, so "1" was the bypass; GIT_REQUIRE_LINKED_WORKTREE fed a boolean the
+# gate tested for falsey, so "0" was the bypass. Recorded per knob because
+# the old semantics differed, and testing the wrong value would pass
+# vacuously: a knob that was never consulted returns the same code either
+# way. The accidental-off direction is included too, since the old emptiness
+# test meant SKIP_PRIMARY_CHECK=0, which plainly reads as "do not skip",
+# turned the gate off.
+BYPASS_VALUES = (
+    ("SKIP_DASH_CHECK", "1"),
+    ("SKIP_EMDASH_CHECK", "1"),
+    ("SKIP_EMDASH", "1"),
+    ("SKIP_PRIMARY_CHECK", "1"),
+    ("SKIP_PRIMARY_CHECK", "0"),
+    ("GIT_REQUIRE_LINKED_WORKTREE", "0"),
+    ("GIT_REQUIRE_LINKED_WORKTREE", "false"),
+    ("SKIP_WORKTREE_BUDGET", "1"),
+)
+DASH_KNOBS = ("SKIP_DASH_CHECK", "SKIP_EMDASH_CHECK", "SKIP_EMDASH")
+PRIMARY_KNOBS = ("SKIP_PRIMARY_CHECK", "GIT_REQUIRE_LINKED_WORKTREE")
+
+
+def scratch_env(locale=LOCALES[0]):
+    # GIT_CONFIG_NOSYSTEM keeps a throwaway repo off any system-level
+    # config, so a stray worktree.maxOpen or core.hooksPath on this machine
+    # cannot change what these runs measure.
+    return dict(
+        os.environ,
+        LC_ALL=locale,
+        LANG=locale,
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_AUTHOR_NAME="hook-knob-test",
+        GIT_AUTHOR_EMAIL="hook-knob-test@invalid",
+        GIT_COMMITTER_NAME="hook-knob-test",
+        GIT_COMMITTER_EMAIL="hook-knob-test@invalid",
+    )
+
+
+def exempt_scratch(work, env):
+    """Exempt a scratch repo from the primary-checkout gate.
+
+    A scratch repo is its own primary checkout, so without this the gate
+    blocks every run before the gate under test ever fires. This is the one
+    documented way to do it: the repo-local config key, not an env knob
+    (docs/things-that-look-like-bugs.md). Used only by the dash checks, where
+    the primary gate is not the subject.
+    """
+    subprocess.run(["git", "-C", work, "config", "worktree.requireLinked",
+                    "false"], env=env, check=True)
+
+
+def init_repo(work, env, exempt=True):
+    subprocess.run(["git", "init", "-q", work], env=env, check=True)
+    # Point hooksPath at a path that does not exist and sign off. This
+    # machine's global config sets core.hooksPath at the real global hooks,
+    # so without this a scratch repo would run the live gate on its own seed
+    # commit. Every hook under test is invoked explicitly below, never by
+    # git, so nothing is lost.
+    subprocess.run(["git", "-C", work, "config", "core.hooksPath",
+                    os.path.join(work, "no-hooks")], env=env, check=True)
+    subprocess.run(["git", "-C", work, "config", "commit.gpgsign", "false"],
+                   env=env, check=True)
+    if exempt:
+        exempt_scratch(work, env)
+
+
+def stage(work, env, text, name="f.txt"):
+    path = os.path.join(work, name)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text if text.endswith("\n") else text + "\n")
+    subprocess.run(["git", "-C", work, "add", name], env=env, check=True)
+
+
+def run(hook, env, cwd, stdin=None, args=()):
+    return subprocess.run(["bash", hook] + list(args), cwd=cwd, env=env,
+                          input=stdin, capture_output=True, text=True)
+
+
+def advertises(stderr):
+    """Return the first bypass phrase or knob name found in a message."""
+    hit = AD_RE.search(stderr)
+    if hit:
+        return "message still offers a bypass (%r)" % hit.group(0)
+    hit = NAME_RE.search(stderr)
+    if hit:
+        return "message still advertises the %s knob" % hit.group(0)
+    return None
+
+
+def check_source_scan():
+    """No hook expands a bypass knob, and none prints one."""
+    problems = []
+    for path in HOOK_FILES:
+        if not os.path.isfile(path):
+            problems.append("missing %s" % os.path.relpath(path, ROOT))
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for lineno, text in enumerate(fh, 1):
+                rel = os.path.relpath(path, ROOT)
+                hit = KNOB_RE.search(text)
+                if hit:
+                    problems.append("%s:%d still expands %s"
+                                    % (rel, lineno, hit.group(1)))
+                hit = AD_RE.search(text)
+                if hit:
+                    problems.append("%s:%d still advertises %r"
+                                    % (rel, lineno, hit.group(0)))
+    if problems:
+        return "\n    ".join(problems)
+    return None
+
+
+def check_dash_knobs():
+    """Dash-gate knobs must not buy a pass on a flagged line."""
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env()
+        init_repo(work, env)
+        stage(work, env, "prose " + EM + " more")
+        base = run(PRE_COMMIT, env, work)
+        if base.returncode == 0:
+            return "dash gate let a flagged line through unflagged"
+        for knob in DASH_KNOBS:
+            done = run(PRE_COMMIT, dict(env, **{knob: "1"}), work)
+            if done.returncode == 0:
+                return "%s=1 still bypasses the dash gate" % knob
+            bad = advertises(done.stderr)
+            if bad:
+                return "%s=1 blocked, but %s" % (knob, bad)
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def check_primary_knobs():
+    """Primary-gate knobs must not buy a pass, and its block must be clean.
+
+    Deliberately NOT exempt: the scratch repo carries no requireLinked key,
+    so the primary-checkout gate blocks. That blocked state is exactly what
+    SKIP_PRIMARY_CHECK and GIT_REQUIRE_LINKED_WORKTREE used to override.
+    """
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env()
+        init_repo(work, env, exempt=False)
+        stage(work, env, "clean prose\n")
+        base = run(PRE_COMMIT, env, work)
+        if base.returncode == 0:
+            return ("primary gate passed an unlinked checkout unflagged; the "
+                    "knob checks below would prove nothing")
+        for knob, value in (("SKIP_PRIMARY_CHECK", "1"),
+                            ("SKIP_PRIMARY_CHECK", "0"),
+                            ("GIT_REQUIRE_LINKED_WORKTREE", "0"),
+                            ("GIT_REQUIRE_LINKED_WORKTREE", "false")):
+            done = run(PRE_COMMIT, dict(env, **{knob: value}), work)
+            if done.returncode == 0:
+                return "%s=%s still bypasses the primary gate" % (knob, value)
+            bad = advertises(done.stderr)
+            if bad:
+                return "%s=%s blocked, but %s" % (knob, value, bad)
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+# The auditor stub. pre-push calls it as `bash "$auditor" --no-content
+# "$primary"` and parses the result as prose bucketed by heading, taking
+# only lines under safe-to-clean and needs-triage that carry a
+# "(worktree: <path>)" annotation. A stub rather than the real skill script
+# so the test is machine-independent: it depends only on git being able to
+# list a worktree, not on whatever this machine's worktrees look like.
+AUDITOR_STUB = """#!/usr/bin/env bash
+cat <<REPORT
+scratch repo report
+  needs-triage:
+    probe-branch (worktree: %s) [idle 1d] unmerged, SCORED 0
+REPORT
+"""
+
+
+def budget_scratch():
+    """A scratch repo with one linked worktree, plus a stub auditor.
+
+    Returns (work, env) with GIT_MAX_WORKTREES=0 and GIT_WORKTREE_AUDIT_BIN
+    pointing at the stub, so the one registered worktree puts the count at
+    1 against a cap of 0 and the budget gate must block. Caller removes the
+    work dir.
+    """
+    work = tempfile.mkdtemp()
+    env = scratch_env()
+    init_repo(work, env, exempt=False)
+    stage(work, env, "seed\n")
+    subprocess.run(["git", "-C", work, "commit", "-q", "-m",
+                    "seed"], env=env, check=True)
+    linked = os.path.join(work, "wt")
+    subprocess.run(["git", "-C", work, "worktree", "add", "-q", "-b",
+                    "probe", linked], env=env, check=True)
+    stub = os.path.join(work, "auditor.sh")
+    with open(stub, "w", encoding="utf-8") as fh:
+        fh.write(AUDITOR_STUB % linked)
+    env = dict(env, GIT_MAX_WORKTREES="0", GIT_WORKTREE_AUDIT_BIN=stub)
+    return work, env
+
+
+REF_LINE = "refs/heads/main 0000000000000000000000000000000000000000 " \
+           "0000000000000000000000000000000000000000\n"
+
+
+def check_push_budget_knobs():
+    """The pre-push budget knob must not buy a pass, and its block is clean."""
+    work, env = budget_scratch()
+    try:
+        base = run(PRE_PUSH, env, work, stdin=REF_LINE)
+        if base.returncode == 0:
+            return ("budget gate passed with 1 worktree against a cap of 0; "
+                    "the knob checks below would prove nothing")
+        for knob, value in (("SKIP_WORKTREE_BUDGET", "1"),):
+            done = run(PRE_PUSH, dict(env, **{knob: value}), work,
+                       stdin=REF_LINE)
+            if done.returncode == 0:
+                return "%s=%s still bypasses the worktree budget" % (knob, value)
+            bad = advertises(done.stderr)
+            if bad:
+                return "%s=%s blocked, but %s" % (knob, value, bad)
+        # The blocked message must still be actionable: it names the repo,
+        # the cap, and the debt. A gate that says nothing is its own bug.
+        for want in ("worktree budget exceeded", "repo:", "Raise the cap"):
+            if want not in base.stderr:
+                return "blocked message lost %r" % want
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def check_commit_msg_clean():
+    """commit-msg must enforce its rules without naming an escape hatch.
+
+    Two rules, two failure paths, because each carried its own message.
+    """
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env()
+        init_repo(work, env)
+        cases = (("bad subject", "no conventional prefix here\n"),
+                 ("banned trailer", "feat: fine subject\n\n"
+                                    "Co-Authored-By: Claude\n"))
+        for name, text in cases:
+            msg = os.path.join(work, "msg")
+            with open(msg, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            done = run(COMMIT_MSG, env, work, stdin="", args=[msg])
+            if done.returncode == 0:
+                return "%s passed a commit-msg hook that should have blocked" % name
+            bad = advertises(done.stderr)
+            if bad:
+                return "%s: %s" % (name, bad)
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+CHECKS = (
+    ("no knob expanded in hook source", check_source_scan),
+    ("dash knobs inert", check_dash_knobs),
+    ("primary-gate knobs inert", check_primary_knobs),
+    ("worktree-budget knob inert", check_push_budget_knobs),
+    ("commit-msg block clean", check_commit_msg_clean),
+)
+
+
+def main():
+    for hook in (PRE_COMMIT, COMMIT_MSG, PRE_PUSH):
+        if not os.path.isfile(hook):
+            print("check-hook-knobs: no hook at %s" % hook, file=sys.stderr)
+            return 2
+    failures = 0
+    for name, check in CHECKS:
+        problem = check()
+        failures += problem is not None
+        print("%-4s %s%s" % ("ok" if problem is None else "FAIL", name,
+                             "" if problem is None else ": " + problem))
+    if failures:
+        print("\ncheck-hook-knobs: %d failure(s)" % failures, file=sys.stderr)
+        return 1
+    print("\ncheck-hook-knobs: %d hook sources clean, %d knobs inert across "
+          "the dash, primary, and worktree-budget gates, blocked messages "
+          "name no escape hatch" % (len(HOOK_FILES), len(BYPASS_VALUES)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

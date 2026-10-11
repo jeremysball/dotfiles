@@ -163,48 +163,6 @@ def check_fix_hint():
         shutil.rmtree(work, ignore_errors=True)
 
 
-def check_no_bypass():
-    """The removed env hatches must not let the commit through."""
-    work, env = scratch_repo(["prose " + EM + " more"], "en_US.UTF-8")
-    try:
-        for knob in ("SKIP_DASH_CHECK", "SKIP_EMDASH_CHECK", "SKIP_EMDASH"):
-            done = subprocess.run(["bash", HOOK], cwd=work,
-                                  env=dict(env, **{knob: "1"}),
-                                  capture_output=True, text=True)
-            if done.returncode == 0:
-                return "%s=1 still bypasses the gate" % knob
-        return None
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
-
-
-def check_no_primary_bypass():
-    """The primary gate's removed env knobs must not let a commit through.
-
-    Deliberately NOT exempt: the scratch repo carries no requireLinked key,
-    so the primary-checkout gate blocks. That blocked state is exactly what
-    SKIP_PRIMARY_CHECK and GIT_REQUIRE_LINKED_WORKTREE used to override.
-    """
-    work = tempfile.mkdtemp()
-    try:
-        env = scratch_env("en_US.UTF-8")
-        subprocess.run(["git", "init", "-q", work], env=env, check=True)
-        with open(os.path.join(work, "f.txt"), "w", encoding="utf-8") as fh:
-            fh.write("clean prose\n")
-        subprocess.run(["git", "-C", work, "add", "f.txt"], env=env, check=True)
-        for knob in ("SKIP_PRIMARY_CHECK", "GIT_REQUIRE_LINKED_WORKTREE"):
-            done = subprocess.run(["bash", HOOK], cwd=work,
-                                  env=dict(env, **{knob: "1"}),
-                                  capture_output=True, text=True)
-            if done.returncode == 0:
-                return "%s=1 still bypasses the primary-checkout gate" % knob
-            if "SKIP_" in done.stderr or "GIT_REQUIRE_LINKED" in done.stderr:
-                return "blocked message still advertises the %s knob" % knob
-        return None
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
-
-
 def main():
     if not os.path.isfile(HOOK):
         print("check-dash-gate: no hook at %s" % HOOK, file=sys.stderr)
@@ -225,10 +183,7 @@ def main():
         failures += not ok
         print("  %-4s got=%-5s want=%-5s %s"
               % ("ok" if ok else "FAIL", got, want, name))
-    for name, check in (("printed fix hint", check_fix_hint),
-                        ("bypass knobs inert", check_no_bypass),
-                        ("primary-gate knobs inert",
-                         check_no_primary_bypass)):
+    for name, check in (("printed fix hint", check_fix_hint),):
         problem = check()
         failures += problem is not None
         print("%-4s %s%s" % ("ok" if problem is None else "FAIL", name,
@@ -237,7 +192,8 @@ def main():
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
     print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
-          "plus the fix hint and the inert dash and primary bypass knobs"
+          "plus the fix hint. Knob inertness and bypass advertisements across "
+          "all three hooks live in scripts/check-hook-knobs.py."
           % (len(CASES), len(LOCALES), len(CODE_CASES)))
     return 0
 

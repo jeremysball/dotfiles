@@ -35,6 +35,34 @@ That is the same property every repo-local git setting has, not a bug in this
 hook. Re-run the one command after cloning. It would only become a real bug if
 the hook started reading the key from a tracked file and still lost it.
 
+## A SKIP_* variable does nothing anymore, and no blocked message offers one
+
+**What you will observe.** `SKIP_DASH_CHECK=1 git commit`,
+`SKIP_PRIMARY_CHECK=1 git commit`, `GIT_REQUIRE_LINKED_WORKTREE=0 git commit`,
+and `SKIP_WORKTREE_BUDGET=1 git push` all behave exactly as if the variable
+were unset. No gate prints `git commit --no-verify` as a suggestion either.
+A gate blocks, and what it prints is how to fix the cause.
+
+**Why it is deliberate.** Each of those variables used to return early, and two
+of the three gates printed the variable in their own error text. A probe on
+2026-10-11 handed six agents a routine commit task with no gate firing: three
+reached for `SKIP_PRIMARY_CHECK` because the hook's own error had offered it,
+and one set it defensively before anything had failed. A bypass that the error
+message advertises is not a decision, it is a reflex, and a reflex stops
+meaning anything. Removing the variable rather than hiding the message is what
+makes that impossible: there is nothing left to reach for.
+
+Turning a gate off is still possible where it is honestly off, and only there.
+A repo a tool owns sets `git config worktree.requireLinked false` (the section
+above). A repo that genuinely runs wide raises the worktree cap with
+`worktree.maxOpen` or `GIT_MAX_WORKTREES`, which still evaluates the gate
+instead of skipping it. Everything else is a worktree.
+
+**When it becomes a real bug.** If any of those variables changes a gate's exit
+code, if a blocked message names an escape hatch again, or if a gate blocks a
+commit with no way to tell what to do next. `python3
+scripts/check-hook-knobs.py` covers all three.
+
 ## The dash gate lets a dash through in code, but not in a comment
 
 **What you will observe.** The pre-commit dash gate blocks an em dash or a

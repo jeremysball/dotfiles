@@ -13,7 +13,19 @@ description = "Run the init.sh bats suite (tests/init.bats)"
 tools = { bats = "1.14.0", jq = "1.8.2", gum = "2.0.2" }
 run = "bats tests"
 
+# Hook self-checks. check-dash-gate is the dash matrix, check-hook-knobs is the
+# knob-inertness and no-advertisement scan across all three hooks, and
+# check-git-hooks runs both.
 [tasks.check-dash-gate]
 description = "Run the pre-commit dash gate's block/pass matrix (scripts/check-dash-gate.py)"
 tools = { ast-grep = "0.44.1" }
 run = "python3 scripts/check-dash-gate.py"
+
+[tasks.check-hook-knobs]
+description = "Assert the hooks honor no bypass knob and advertise none (scripts/check-hook-knobs.py)"
+tools = { ast-grep = "0.44.1" }
+run = "python3 scripts/check-hook-knobs.py"
+
+[tasks.check-git-hooks]
+description = "Run both hook checkers (dash matrix, then knob and advertisement checks)"
+depends = ["check-dash-gate", "check-hook-knobs"]

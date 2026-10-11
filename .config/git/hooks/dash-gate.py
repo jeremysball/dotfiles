@@ -307,7 +307,8 @@ def main(argv=None):
               file=err)
     print("", file=err)
     print("Prose rules still match a markdown table separator padded with spaces"
-          " (| %s |). Bypass that." % DD, file=err)
+          " (| %s |), and the sed above would flatten it to a comma and break"
+          " the table. Hand-edit that line instead." % DD, file=err)
     print("No bypass for this gate; fix the flagged line.", file=err)
     return 1
 

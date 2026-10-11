@@ -1,25 +1,32 @@
-name: check-dash-gate
+name: check-git-hooks
 
-# Runs scripts/check-dash-gate.py through `mise run check-dash-gate`: the real
-# pre-commit hook over real staged diffs in scratch repos. The fish cases
-# compile tree-sitter-fish on first use, which needs the runner's cc and network.
+# Runs the global git hooks' own checks through mise: scripts/check-dash-gate.py
+# is the dash gate's block/pass matrix, and scripts/check-hook-knobs.py asserts
+# no hook honors a bypass knob and none advertises one. The fish cases compile
+# tree-sitter-fish on first use, which needs the runner's cc and network.
 
 on:
   push:
     branches: [main]
     paths:
       - '.config/git/hooks/pre-commit'
+      - '.config/git/hooks/commit-msg'
+      - '.config/git/hooks/pre-push'
       - '.config/git/hooks/dash-gate.py'
       - 'scripts/check-dash-gate.py'
+      - 'scripts/check-hook-knobs.py'
       - '.mise.toml'
-      - '.github/workflows/check-dash-gate.yml'
+      - '.github/workflows/check-git-hooks.yml'
   pull_request:
     paths:
       - '.config/git/hooks/pre-commit'
+      - '.config/git/hooks/commit-msg'
+      - '.config/git/hooks/pre-push'
       - '.config/git/hooks/dash-gate.py'
       - 'scripts/check-dash-gate.py'
+      - 'scripts/check-hook-knobs.py'
       - '.mise.toml'
-      - '.github/workflows/check-dash-gate.yml'
+      - '.github/workflows/check-git-hooks.yml'
   workflow_dispatch:
 
 jobs:
@@ -35,3 +42,4 @@ jobs:
         with:
           install: false
       - run: mise run check-dash-gate
+      - run: mise run check-hook-knobs

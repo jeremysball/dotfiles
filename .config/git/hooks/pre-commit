@@ -12,7 +12,8 @@
 #      No bypass, by user directive 2026-10-11: fix the flagged line.
 #   2. Hardcoded absolute path gate: block a staged code line that hardcodes
 #      /home/..., /workspace/..., a username, or a hostname, per CLAUDE.md's
-#      "Avoid hardcoded absolute paths" rule. Override once: git commit --no-verify.
+#      "Avoid hardcoded absolute paths" rule. No bypass, by user directive
+#      2026-10-11: make the line relative or resolve it from an env var.
 #   3. dotfiles adhd-theme guardrail: if the repo has
 #      scripts/check-adhd-themes.sh (i.e. this IS the dotfiles repo), run it
 #      in --tracked-only mode so kilo/opencode can't commit a theme that
