@@ -12,3 +12,8 @@
 description = "Run the init.sh bats suite (tests/init.bats)"
 tools = { bats = "1.14.0", jq = "1.8.2", gum = "2.0.2" }
 run = "bats tests"
+
+[tasks.check-dash-gate]
+description = "Run the pre-commit dash gate's block/pass matrix (scripts/check-dash-gate.py)"
+tools = { ast-grep = "0.44.1" }
+run = "python3 scripts/check-dash-gate.py"
