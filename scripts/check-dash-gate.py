@@ -163,6 +163,32 @@ def check_fix_hint():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def check_gitlink():
+    """A staged submodule pointer carries no prose; the gate must pass it.
+
+    Exempt like every other scratch repo here. The throwaway repo is its own
+    primary checkout, so the primary-checkout gate blocks first and this test
+    would measure that gate instead of the dash gate. The exemption predates
+    the knob this test was written against: when the knob still existed it was
+    set, and the config key is the one supported way now.
+    """
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env("en_US.UTF-8")
+        subprocess.run(["git", "init", "-q", work], env=env, check=True)
+        exempt_scratch(work, env)
+        sha = "1" * 40
+        subprocess.run(["git", "-C", work, "update-index", "--add",
+                        "--cacheinfo", "160000,%s,sub" % sha], env=env, check=True)
+        done = subprocess.run(["bash", HOOK], cwd=work, env=env,
+                              capture_output=True, text=True)
+        if done.returncode != 0:
+            return "staged gitlink blocked: %s" % done.stderr.strip()[:200]
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def main():
     if not os.path.isfile(HOOK):
         print("check-dash-gate: no hook at %s" % HOOK, file=sys.stderr)
@@ -183,7 +209,8 @@ def main():
         failures += not ok
         print("  %-4s got=%-5s want=%-5s %s"
               % ("ok" if ok else "FAIL", got, want, name))
-    for name, check in (("printed fix hint", check_fix_hint),):
+    for name, check in (("printed fix hint", check_fix_hint),
+                        ("staged gitlink", check_gitlink)):
         problem = check()
         failures += problem is not None
         print("%-4s %s%s" % ("ok" if problem is None else "FAIL", name,
@@ -192,8 +219,9 @@ def main():
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
     print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
-          "plus the fix hint. Knob inertness and bypass advertisements across "
-          "all three hooks live in scripts/check-hook-knobs.py."
+          "plus the fix hint and the staged-gitlink case. Knob inertness "
+          "and bypass advertisements across all three hooks live in "
+          "scripts/check-hook-knobs.py."
           % (len(CASES), len(LOCALES), len(CODE_CASES)))
     return 0
 
