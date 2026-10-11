@@ -6,18 +6,21 @@
 # machine that runs `mise bootstrap dotfiles apply` gets both with zero
 # manual setup.
 #
-# Five jobs, in order:
+# Six jobs, in order:
 #   1. Dash gate: block staged em/en dashes and double-hyphen stand-ins.
 #      Override once: git commit --no-verify  or  SKIP_DASH_CHECK=1 git commit.
-#   2. dotfiles adhd-theme guardrail: if the repo has
+#   2. Hardcoded absolute path gate: block a staged code line that hardcodes
+#      /home/..., /workspace/..., a username, or a hostname, per CLAUDE.md's
+#      "Avoid hardcoded absolute paths" rule. Override once: git commit --no-verify.
+#   3. dotfiles adhd-theme guardrail: if the repo has
 #      scripts/check-adhd-themes.sh (i.e. this IS the dotfiles repo), run it
 #      in --tracked-only mode so kilo/opencode can't commit a theme that
 #      silently drops. No-op in every other repo.
-#   3. fleet skill-registry guardrail: in dotfiles or dotclaude, run
+#   4. fleet skill-registry guardrail: in dotfiles or dotclaude, run
 #      scripts/sync-fleet-skills.sh --tracked-only so a dropped skills.paths
 #      entry or an absolute/dangling fleet-skills symlink can't be committed.
 #      No-op in every other repo.
-#   4. Primary-checkout gate: refuse to commit from a repo's primary
+#   5. Primary-checkout gate: refuse to commit from a repo's primary
 #      checkout. Every change belongs in a linked worktree, so the primary
 #      stays a stable merge base for concurrent workers.
 #      Override once: git commit --no-verify  or  SKIP_PRIMARY_CHECK=1 git commit.
@@ -27,7 +30,7 @@
 #        DEFAULT_REQUIRE_LINKED           built-in default, below
 #      The config key is read with --local on purpose. A --global value is
 #      ignored, so one stray command cannot disarm the gate machine-wide.
-#   5. Chain to repo-local .githooks/pre-commit / hooks/pre-commit if present,
+#   6. Chain to repo-local .githooks/pre-commit / hooks/pre-commit if present,
 #      so per-repo hooks keep working alongside the global one.
 set -euo pipefail
 
@@ -107,14 +110,28 @@ else
   fi
 fi
 
-# --- 2. dotfiles adhd-theme guardrail (repo-dispatched) ---
+# --- 2. hardcoded absolute path gate ---
+# ~/.claude/CLAUDE.md's "Avoid hardcoded absolute paths" rule, mechanised. The
+# rule survived in prose for a long time because nothing enforced it; this is
+# the check that lets the rule's text eventually be deleted from CLAUDE.md,
+# which is what that file's own "Ladder, best first: mechanical check, rule
+# here, nothing" asks for.
+#
+# Scans only staged code files and only the lines this commit adds, so prose
+# naming an example path and a pre-existing violation elsewhere both pass.
+abs_path_gate="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/abs-path-gate.py"
+if [ -x "$abs_path_gate" ]; then
+  "$abs_path_gate" || exit 1
+fi
+
+# --- 3. dotfiles adhd-theme guardrail (repo-dispatched) ---
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 theme_check="$repo_root/scripts/check-adhd-themes.sh"
 if [ -f "$theme_check" ]; then
   "$theme_check" --tracked-only
 fi
 
-# --- 3. fleet skill-registry guardrail (dotfiles + dotclaude) ---
+# --- 4. fleet skill-registry guardrail (dotfiles + dotclaude) ---
 # Two repos can break the fleet's skill wiring at commit time: dotfiles owns
 # the tracked kilo/opencode configs that declare skills.paths, and dotclaude
 # owns the generated ~/.claude/fleet-skills/ symlinks. Prefer the committing
@@ -129,7 +146,7 @@ if [ -f "$fleet_check" ]; then
     bash "$fleet_check" --tracked-only
 fi
 
-# --- 4. primary-checkout gate ---
+# --- 5. primary-checkout gate ---
 # The primary checkout is the merge base every concurrent worker reads
 # against. A commit landed there forces all of them onto a moved base, so
 # every change, regardless of size, belongs in a linked worktree. Compares
@@ -193,7 +210,7 @@ if is_off "${SKIP_PRIMARY_CHECK:-0}"; then
   fi
 fi
 
-# --- 5. chain to repo-local pre-commit if present ---
+# --- 6. chain to repo-local pre-commit if present ---
 # Skipped when a repo shim already invoked us (GIT_HOOKS_CHAINED=1). That
 # shim dispatches to .githooks/pre-commit.local itself once we return, so
 # chaining here would re-enter the shim and run the gates above twice.
