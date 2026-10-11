@@ -5,10 +5,10 @@
 	defaultBranch = main
 [credential "https://github.com"]
 	helper = 
-	helper = !gh auth git-credential
+	helper = !/home/jeremy/.local/share/mise/installs/gh/2.102.0/gh_2.102.0_linux_amd64/bin/gh auth git-credential
 [credential "https://gist.github.com"]
 	helper = 
-	helper = !gh auth git-credential
+	helper = !/home/jeremy/.local/share/mise/installs/gh/2.102.0/gh_2.102.0_linux_amd64/bin/gh auth git-credential
 [filter "lfs"]
 	clean = git-lfs clean -- %f
 	smudge = git-lfs smudge -- %f
@@ -23,4 +23,4 @@
 	# blocks em and en dashes plus double-hyphen stand-ins; the pre-push
 	# enforces the open-worktree budget (cap via worktree.maxOpen or
 	# GIT_MAX_WORKTREES, classifier via worktree.auditBin).
-	hooksPath = ~/.config/git/hooks
+	hooksPath = /home/jeremy/.config/git/hooks
