@@ -133,3 +133,20 @@ these subjects, or a fixed-wording shape (Deinitialize, Signing, Set GPG id)
 accepts a subject pass would never produce. A newer pass that changes its
 wording will show up as a blocked pass command; at that point, add the new shape
 to the pattern list and to `PASS_SUBJECTS` instead of loosening it.
+
+## pre-commit's gates ignore a repo's diff drivers
+
+**What you will observe.** A repo that sets a textconv driver (pass sets
+`diff.gpg.textconv` to `gpg -d`) shows decrypted text in `git diff`, but the dash
+and abs-path gates never see that text. A dash inside a decrypted secret does
+not block the commit.
+
+**Why it is deliberate.** The gates check the bytes going into the commit, and
+those are the ciphertext. Running the driver would decrypt secrets into a
+hook's scan, and with no pinentry tty it fails outright: the dash gate used to
+block every pass commit on coding-workspace this way. Both gates pass
+`--no-textconv` and `--no-ext-diff`, and `check-dash-gate` stages files behind a
+driver that always fails.
+
+**When it becomes a real bug.** If a gate is meant to judge rendered content
+rather than stored bytes, or a new gate adds a `git diff` without both flags.

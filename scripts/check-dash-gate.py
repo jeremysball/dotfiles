@@ -190,7 +190,7 @@ def check_gitlink():
 
 
 def check_textconv():
-    """The gate scans committed bytes, never a textconv driver's output.
+    """pre-commit's gates scan committed bytes, never a textconv driver's output.
 
     pass sets diff.gpg.textconv to gpg -d, which fails with no pinentry tty
     and would otherwise feed decrypted secrets to the scan. A driver that
@@ -204,11 +204,14 @@ def check_textconv():
         subprocess.run(["git", "-C", work, "config", "diff.fail.textconv",
                         "false"], env=env, check=True)
         with open(os.path.join(work, ".gitattributes"), "w") as fh:
-            fh.write("*.gpg diff=fail\n")
+            fh.write("*.gpg diff=fail\n*.sh diff=fail\n")
         with open(os.path.join(work, "secret.gpg"), "wb") as fh:
             fh.write(b"\x85\x02\x0c\x03ciphertext\n")
+        # A code file behind the same driver reaches the abs-path gate too.
+        with open(os.path.join(work, "tool.sh"), "w") as fh:
+            fh.write("echo ok\n")
         subprocess.run(["git", "-C", work, "add", ".gitattributes",
-                        "secret.gpg"], env=env, check=True)
+                        "secret.gpg", "tool.sh"], env=env, check=True)
         done = subprocess.run(["bash", HOOK], cwd=work, env=env,
                               capture_output=True, text=True)
         if done.returncode != 0:
