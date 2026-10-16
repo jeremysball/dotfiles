@@ -125,6 +125,10 @@ def added_lines():
                       # no prose, and `git show :<gitlink>` cannot read it.
                       "--ignore-submodules=all",
                       "--unified=0", "--no-color", "--no-ext-diff",
+                      # Scan the bytes being committed. A textconv driver
+                      # (pass sets diff.gpg.textconv to gpg -d) would decrypt
+                      # secrets into the scan, or fail with no pinentry tty.
+                      "--no-textconv",
                       "--src-prefix=a/", "--dst-prefix=b/"))
     files, path, lineno = {}, None, 0
     for line in diff.split("\n"):

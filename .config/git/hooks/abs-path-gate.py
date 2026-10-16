@@ -31,7 +31,10 @@ def staged_code_files():
 def added_lines(path):
     """(file, text) for each '+' line this commit introduces in path."""
     rows, current = [], None
-    for line in git("diff", "--cached", "-U0", "--", path).splitlines():
+    # --no-textconv/--no-ext-diff: scan the bytes being committed, not a
+    # diff driver's rendering of them (pass sets diff.gpg.textconv).
+    for line in git("diff", "--cached", "-U0", "--no-textconv", "--no-ext-diff",
+                    "--", path).splitlines():
         if line.startswith("+++ b/"):
             current = line[6:]
         elif line.startswith("+") and not line.startswith("+++"):

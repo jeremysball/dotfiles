@@ -189,6 +189,38 @@ def check_gitlink():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def check_textconv():
+    """pre-commit's gates scan committed bytes, never a textconv driver's output.
+
+    pass sets diff.gpg.textconv to gpg -d, which fails with no pinentry tty
+    and would otherwise feed decrypted secrets to the scan. A driver that
+    always fails stands in for it: if the gate runs it, the commit blocks.
+    """
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env("en_US.UTF-8")
+        subprocess.run(["git", "init", "-q", work], env=env, check=True)
+        exempt_scratch(work, env)
+        subprocess.run(["git", "-C", work, "config", "diff.fail.textconv",
+                        "false"], env=env, check=True)
+        with open(os.path.join(work, ".gitattributes"), "w") as fh:
+            fh.write("*.gpg diff=fail\n*.sh diff=fail\n")
+        with open(os.path.join(work, "secret.gpg"), "wb") as fh:
+            fh.write(b"\x85\x02\x0c\x03ciphertext\n")
+        # A code file behind the same driver reaches the abs-path gate too.
+        with open(os.path.join(work, "tool.sh"), "w") as fh:
+            fh.write("echo ok\n")
+        subprocess.run(["git", "-C", work, "add", ".gitattributes",
+                        "secret.gpg", "tool.sh"], env=env, check=True)
+        done = subprocess.run(["bash", HOOK], cwd=work, env=env,
+                              capture_output=True, text=True)
+        if done.returncode != 0:
+            return "staged textconv file blocked: %s" % done.stderr.strip()[:200]
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def main():
     if not os.path.isfile(HOOK):
         print("check-dash-gate: no hook at %s" % HOOK, file=sys.stderr)
@@ -210,7 +242,8 @@ def main():
         print("  %-4s got=%-5s want=%-5s %s"
               % ("ok" if ok else "FAIL", got, want, name))
     for name, check in (("printed fix hint", check_fix_hint),
-                        ("staged gitlink", check_gitlink)):
+                        ("staged gitlink", check_gitlink),
+                        ("textconv not run", check_textconv)):
         problem = check()
         failures += problem is not None
         print("%-4s %s%s" % ("ok" if problem is None else "FAIL", name,
@@ -219,7 +252,7 @@ def main():
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
     print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
-          "plus the fix hint and the staged-gitlink case. Knob inertness "
+          "plus the fix hint, staged-gitlink, and textconv cases. Knob inertness "
           "and bypass advertisements across all three hooks live in "
           "scripts/check-hook-knobs.py."
           % (len(CASES), len(LOCALES), len(CODE_CASES)))
