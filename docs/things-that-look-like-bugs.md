@@ -111,16 +111,25 @@ that is not Conventional Commits, but `~/.password-store` fills up with commits
 like "Add given password for X to store." and "Edit password for Y using vi."
 
 **Why it is deliberate.** pass writes those subjects itself and has no option to
-change them, the same position git is in with "Merge" and "Revert", which the
-hook already lets through. Without the carve-out every `pass insert`, `pass
-edit`, and docker credential-helper write fails, and leaves its change staged
-but uncommitted. The carve-out is narrow on both sides: the repo's top level
-has to hold the `.gpg-id` that `pass init` creates, and the subject has to match
-one of the shapes pass 1.7.4 generates. The AI-trailer check still runs on these
-commits. `mise run check-hook-knobs` asserts that both halves hold.
+change them, the same position git is in with "Merge", "Revert", and the
+`fixup!`/`squash!`/`amend!` subjects of `git commit --fixup`, which the hook also
+lets through. Without the carve-out every `pass insert`, `pass edit`, and docker
+credential-helper write fails, and leaves its change staged but uncommitted. The
+repo's top level has to hold the `.gpg-id` that `pass init` creates, and the
+subject has to match one of the pass 1.7.4 shapes. Most shapes carry fixed
+wording ("Add given password for X to store."), but "Remove X.", "Rename X to
+Y.", and "Copy X to Y." interpolate only a path, so any hand-written subject of
+that shape passes too. The AI-trailer check runs before every carve-out, git's
+included. `mise run check-hook-knobs` checks one subject per shape, the
+`.gpg-id` baseline, and a few pass-shaped subjects that must still block.
+
+**This alone does not make pass commit.** pass commits from the store's own
+primary checkout, so pre-commit's primary-checkout gate blocks it too until the
+store carries `git config worktree.requireLinked false`. That exemption is the
+user's to set, per store, the same as for any repo with no worktree workflow.
 
 **When it becomes a real bug.** If a repo without a `.gpg-id` accepts one of
-these subjects, or if a hand-written subject that pass would never produce gets
-through in a store. A newer pass that changes its wording will show up as a
-blocked pass command; at that point, add the new shape to the pattern list
-instead of loosening it.
+these subjects, or a fixed-wording shape (Deinitialize, Signing, Set GPG id)
+accepts a subject pass would never produce. A newer pass that changes its
+wording will show up as a blocked pass command; at that point, add the new shape
+to the pattern list and to `PASS_SUBJECTS` instead of loosening it.

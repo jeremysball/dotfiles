@@ -12,17 +12,13 @@
 #      the user's name may carry a Claude-Session trailer, a session URL, a
 #      Co-Authored-By: Claude trailer, or a Generated-with footer.
 #   2. Require a Conventional Commits subject line, except for the subjects
-#      git (Merge, Revert) and pass (inside a password store) generate.
+#      git (Merge, Revert, fixup!/squash!/amend!) and pass (inside a password
+#      store) generate.
 # No bypass, by user directive 2026-10-11: fix the message and commit again.
 set -euo pipefail
 
 msg_file="${1:?commit-msg: no message file given}"
 subject="$(sed -n '1p' "$msg_file")"
-
-# Merge and revert commits keep git's own generated subjects.
-case "$subject" in
-  "Merge "*|"Revert "*) exit 0 ;;
-esac
 
 fail() { echo "commit-msg: blocked. $1" >&2; exit 1; }
 
@@ -32,15 +28,26 @@ for banned in "Claude-Session:" "claude.ai/code/session_" "Co-Authored-By: Claud
   fi
 done
 
+# Every carve-out below sits after the trailer check, so job 1 still runs on
+# the subjects it lets through.
+
+# Merge, revert, and autosquash commits keep git's own generated subjects.
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+esac
+
 # pass(1) writes its own subjects ("Add given password for X to store.") and
-# offers no way to change them, the same as git's Merge and Revert above. Let
-# exactly those through, and only in a password store: a repo whose top level
-# holds the .gpg-id that `pass init` creates. The trailer check above still
-# ran. Patterns are every git_commit/git_add_file subject in pass 1.7.4.
+# offers no way to change them, the same as git's generated subjects above.
+# Let those through, and only in a password store: a repo whose top level
+# holds the .gpg-id that `pass init` creates. Patterns are every
+# git_commit/git_add_file subject in pass 1.7.4. The ones that interpolate
+# only a user path ("Remove X.", "Rename X to Y.", "Copy X to Y.") match any
+# subject of that shape; nothing in the text tells them apart from pass's.
+# Reencrypt takes .* because deinit leaves the id list empty ("new GPG id .").
 repo_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -n "$repo_top" ] && [ -f "$repo_top/.gpg-id" ] \
   && printf '%s' "$subject" | grep -qE \
-    '^(Add given password for .+ to store|(Add|Edit) password for .+ using .+|(Add|Replace) generated password for .+|Remove .+|Rename .+ to .+|Copy .+ to .+|Add current contents of password store|Configure git repository for gpg file diff|Set GPG id to .+|Signing new GPG id with .+|Reencrypt password store using new GPG id .+|Deinitialize .+)\.$'; then
+    '^(Add given password for .+ to store|(Add|Edit) password for .+ using .+|(Add|Replace) generated password for .+|Remove .+|Rename .+ to .+|Copy .+ to .+|Add current contents of password store|Configure git repository for gpg file diff|Set GPG id to .+|Signing new GPG id with .+|Reencrypt password store using new GPG id .*|Deinitialize .*/\.gpg-id( \(.+\))?)\.$'; then
   exit 0
 fi
 
