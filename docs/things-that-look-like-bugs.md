@@ -32,8 +32,12 @@ per repo. Check with `git config --get worktree.requireLinked` in the repo, and
 `git config worktree.requireLinked false` writes to `.git/config`, which git
 never tracks, so a re-clone of an exempt repo comes back with the gate on.
 That is the same property every repo-local git setting has, not a bug in this
-hook. Re-run the one command after cloning. It would only become a real bug if
-the hook started reading the key from a tracked file and still lost it.
+hook. For the pass store, mise-en-system's `exempt-tool-owned-repos` task
+sets it again: init.sh runs it after `install-secrets` clones the store, and
+`secrets-sync` runs it when it clones the store itself. It only exempts a repo
+that has `.gpg-id` at its top level. Any other tool-owned repo needs its own
+entry in that task. It would only become a real bug if the hook started
+reading the key from a tracked file and still lost it.
 
 ## A SKIP_* variable does nothing anymore, and no blocked message offers one
 
