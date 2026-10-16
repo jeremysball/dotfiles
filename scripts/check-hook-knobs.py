@@ -348,28 +348,110 @@ def check_push_budget_knobs():
         shutil.rmtree(work, ignore_errors=True)
 
 
+NON_CONVENTIONAL = "no conventional prefix here\n"
+BANNED_TRAILER = "\n\nCo-Authored-By: Claude\n"
+
+
+def commit_msg(work, env, text):
+    """Run the real commit-msg hook on text; return the CompletedProcess."""
+    msg = os.path.join(work, "msg")
+    with open(msg, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return run(COMMIT_MSG, env, work, stdin="", args=[msg])
+
+
 def check_commit_msg_clean():
     """commit-msg must enforce its rules without naming an escape hatch.
 
-    Two rules, two failure paths, because each carried its own message.
+    Two rules, two failure paths, because each carried its own message. The
+    trailer rule also covers the subjects git generates, which skip the
+    Conventional Commits rule.
     """
     work = tempfile.mkdtemp()
     try:
         env = scratch_env()
         init_repo(work, env)
-        cases = (("bad subject", "no conventional prefix here\n"),
-                 ("banned trailer", "feat: fine subject\n\n"
-                                    "Co-Authored-By: Claude\n"))
+        cases = [("bad subject", NON_CONVENTIONAL),
+                 ("banned trailer", "feat: fine subject" + BANNED_TRAILER)]
+        cases += [("banned trailer on %r" % s, s + BANNED_TRAILER)
+                  for s in ("Merge branch 'x'", 'Revert "feat: x"',
+                            "fixup! feat: x")]
         for name, text in cases:
-            msg = os.path.join(work, "msg")
-            with open(msg, "w", encoding="utf-8") as fh:
-                fh.write(text)
-            done = run(COMMIT_MSG, env, work, stdin="", args=[msg])
+            done = commit_msg(work, env, text)
             if done.returncode == 0:
                 return "%s passed a commit-msg hook that should have blocked" % name
             bad = advertises(done.stderr)
             if bad:
                 return "%s: %s" % (name, bad)
+        for subject in ("Merge branch 'x'", "fixup! feat: x", "squash! feat: x",
+                        "amend! feat: x"):
+            if commit_msg(work, env, subject + "\n").returncode != 0:
+                return "git-generated subject %r blocked" % subject
+        return None
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+# One subject per alternative in the hook's pass pattern, each copied from a
+# git_commit/git_add_file call in pass 1.7.4, so a regex edit that drops a
+# shape shows up here. Deinit's reencrypt subject has an empty id list.
+PASS_SUBJECTS = (
+    "Add given password for docker-credential-helpers/x/check to store.",
+    "Add password for global/env using vi.",
+    "Edit password for global/env using vi.",
+    "Add generated password for web/site.",
+    "Replace generated password for web/site.",
+    "Remove web/site from store.",
+    "Remove web/a.",
+    "Rename web/a to web/b.",
+    "Copy web/a to web/b.",
+    "Add current contents of password store.",
+    "Configure git repository for gpg file diff.",
+    "Set GPG id to ABCDEF.",
+    "Set GPG id to ABCDEF (sub).",
+    "Signing new GPG id with ABCDEF.",
+    "Reencrypt password store using new GPG id ABCDEF.",
+    "Reencrypt password store using new GPG id .",
+    "Deinitialize /srv/store//.gpg-id.",
+    "Deinitialize /srv/store/sub/.gpg-id (sub).",
+)
+
+# Pass-shaped but not something pass writes: the tightened alternatives must
+# still block these in a store.
+NOT_PASS_SUBJECTS = (
+    "Deinitialize my weekend.",
+    "Add given password for x to store",
+)
+
+
+def check_commit_msg_pass_store():
+    """pass's own subjects pass in a password store, and only there.
+
+    Baseline first: the same subjects must block in a repo with no .gpg-id,
+    or the store case would pass for the wrong reason. The trailer rule still
+    applies inside a store.
+    """
+    work = tempfile.mkdtemp()
+    try:
+        env = scratch_env()
+        init_repo(work, env)
+
+        def verdict(text):
+            return commit_msg(work, env, text).returncode
+
+        for subject in PASS_SUBJECTS:
+            if verdict(subject + "\n") == 0:
+                return "%r passed outside a password store" % subject
+        with open(os.path.join(work, ".gpg-id"), "w", encoding="utf-8") as fh:
+            fh.write("ABCDEF\n")
+        for subject in PASS_SUBJECTS:
+            if verdict(subject + "\n") != 0:
+                return "%r blocked inside a password store" % subject
+        for subject in NOT_PASS_SUBJECTS + (NON_CONVENTIONAL.rstrip("\n"),):
+            if verdict(subject + "\n") == 0:
+                return "%r passed inside a password store" % subject
+        if verdict(PASS_SUBJECTS[0] + BANNED_TRAILER) == 0:
+            return "a banned trailer passed on a pass subject"
         return None
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -381,6 +463,8 @@ CHECKS = (
     ("primary-gate knobs inert", check_primary_knobs),
     ("worktree-budget knob inert", check_push_budget_knobs),
     ("commit-msg block clean", check_commit_msg_clean),
+    ("commit-msg passes pass subjects in a store only",
+     check_commit_msg_pass_store),
     ("abs-path block clean", check_abs_path_message),
 )
 
