@@ -154,3 +154,28 @@ driver that always fails.
 
 **When it becomes a real bug.** If a gate is meant to judge rendered content
 rather than stored bytes, or a new gate adds a `git diff` without both flags.
+
+## `source` is a function in Claude Code Bash tool shells
+
+**What you will observe.** Inside a Claude Code Bash tool call, `type source`
+reports a function rather than the builtin, and sourcing a file under
+`~/.claude/shell-snapshots/` runs `mise activate bash` again right after it.
+
+**Why it is deliberate.** Claude Code runs every Bash tool command as
+`/bin/bash -c 'source ~/.claude/shell-snapshots/snapshot-bash-*.sh ... && eval
+"<command>"'` (observed via /proc/$$/cmdline from inside the tool, 2026-10-18).
+BASH_ENV is read at bash startup, before that source, so the snapshot's
+`export PATH` would otherwise overwrite mise activation with the frozen
+launch-time PATH on every inline command. `~/.config/mise/claude-bash-env.sh`
+(the BASH_ENV file) therefore shadows `source` and re-activates only after a
+snapshot source, making activation the last thing to touch PATH. Without it,
+`node -v` in a project pinning node = "24.21.0" answers the snapshot's
+v26.7.0; with it, the project pin. The kilo and opencode equivalents do not
+need this because their `shell` config key points at a wrapper
+(`~/.config/mise/agent-shell.sh`) instead of a bare bash.
+
+**When it becomes a real bug.** If the re-activation ever fires for files
+outside */shell-snapshots/*, or if Claude Code stops sourcing the snapshot via
+`source` (then activation would run before the snapshot again and the frozen
+PATH would silently win; the symptom is `node -v` reporting the global version
+inside a project pin).

@@ -72,6 +72,16 @@
   //   base: the llmgateway provider block below
   "model": "llmgateway/mimo-v2.6-pro",
 
+  // Terminal and shell tool calls run through the mise-activated wrapper
+  // instead of a bare bash, so every command resolves the working
+  // directory's .mise.toml (tools, versions, [env]) without the
+  // `mise exec` workaround. Added 2026-10-18 together with the kilo
+  // twin; see .config/mise/agent-shell.sh and the [dotfiles] entry that
+  // links it into place. The {env:HOME} form is required here: the shell
+  // value is not tilde-expanded, and a spawn failure falls back to a bare
+  // bash with no error at all (both verified live 2026-10-18).
+  "shell": "{env:HOME}/.config/mise/agent-shell.sh",
+
   "agent": {
     "build": {
       // Default agent runs llmgateway/mimo-v2.6-pro (thinking on by
