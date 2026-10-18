@@ -6,8 +6,11 @@
 # binary on PATH. This file just exposes ~/.empryo/bin once the bootstrap
 # task (`mise run install-empryo`) has been run at least once on this host.
 #
-# `command -q empryo` so the line no-ops on hosts that haven't installed
-# Empryo yet, instead of leaving a dead directory on PATH.
-if command -q empryo
+# Gated on the installed binary instead of `command -q empryo`: the first
+# post-install session has the binary on disk but not on PATH, so a PATH
+# lookup would miss it and the dir would never get added. `test -x` sees it
+# from disk, and fish_add_path persists via fish_user_paths, so later
+# sessions keep it.
+if test -x $HOME/.empryo/bin/empryo
     fish_add_path --append --path $HOME/.empryo/bin
 end
