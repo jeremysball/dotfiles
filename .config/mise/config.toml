@@ -47,6 +47,7 @@ neovim = "latest"
 
 # git
 gh      = "latest"
+"npm:gh-axi" = "0.1.42"
 lazygit = "latest"
 delta   = "latest"
 
