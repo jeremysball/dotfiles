@@ -166,6 +166,13 @@ experimental = true
 # mise (this file too)
 "~/.config/mise/config.toml" = {}
 
+# agent tool-shell wiring. These three are what make kilo/opencode/claude
+# commands resolve the working directory's .mise.toml (the `mise exec`
+# workaround goes away); see the header comment in agent-bash-env.sh.
+"~/.config/mise/agent-bash-env.sh" = {}
+"~/.config/mise/agent-shell.sh" = {}
+"~/.config/mise/claude-bash-env.sh" = {}
+
 # nvim
 "~/.config/nvim/.gitignore" = {}
 "~/.config/nvim/.neoconf.json" = {}
