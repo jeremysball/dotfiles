@@ -90,6 +90,29 @@ line by line, as before. Unknown means strict, never skipped.
 if a code file is checked line by line again. `python3
 scripts/check-dash-gate.py` covers both directions.
 
+## The dash gate lets a license file keep its double hyphens
+
+**What you will observe.** `LICENSE.txt`, `LICENCE`, `COPYING`, `NOTICE.txt`,
+`OFL-1.1.txt`, and `LICENSE-APACHE` commit untouched with an em dash or a
+spaced double hyphen in them, while the same characters in the file next
+door block the commit. Bundled Lexica Ultralegible fonts brought this up:
+the SIL OFL text that ships with them defines "Modified Version" with the
+exact shape the gate exists to block.
+
+**Why it is deliberate.** A license's punctuation belongs to its licensor.
+The SIL OFL requires its text travel with the fonts it licenses, and the
+gate's own remedy (replace it with a comma, period, or colon) would falsify
+a legal document. So the gate takes legal-document names at their word: the
+stem `licen[cs]e`, `copying`, `notice`, or `ofl` must end the filename or be
+followed by a dot or a hyphen. Name-scoped, not content-scoped: the same
+characters in authored prose still block.
+
+**When it becomes a real bug.** If authored prose gets parked under a legal
+name to reach the exemption, that file is taken at its word, because the
+filename is the only signal. If the names ever widen past legal documents,
+or a dash in authored prose commits because of it, it is a bug. `python3
+scripts/check-dash-gate.py` pins both directions.
+
 ## The first commit of a fish file pauses to compile something
 
 **What you will observe.** The first time a `.fish` file is staged on a

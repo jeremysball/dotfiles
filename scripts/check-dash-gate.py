@@ -67,6 +67,38 @@ CODE_CASES = [
     ("block", "markdown stays prose", "a.md", "run foo " + DD + " bar"),
 ]
 
+# Verbatim legal text is not authored prose. A license's punctuation belongs
+# to its licensor, and the SIL OFL requires its text travel with the fonts it
+# licenses, while its own wording carries the double-hyphen shape this gate
+# exists to block. Rewriting legal text is a worse outcome than not checking
+# the file, so legal-document names are taken at their word. Name-scoped, not
+# content-scoped: the stem must end the name or be followed by a dot or a
+# hyphen, so LICENSE.txt, LICENSE-APACHE, OFL-1.1.txt and COPYING match while
+# noticeable.md does not. The block cases pin the contrast with authored
+# prose of the same shape.
+LICENSE_CASES = [
+    ("pass", "license keeps the upstream shape", "LICENSE.txt",
+     "or substituting " + DD + " in part " + DD + " whole"),
+    ("pass", "licence spelling", "LICENCE",
+     "deleting " + DD + " or " + DD + " components"),
+    ("pass", "bare copying name", "COPYING",
+     "redistribute " + EM + " verbatim " + EM + " text"),
+    ("pass", "notice with extension", "NOTICE.txt",
+     "attributed " + EN + " as " + EN + " required"),
+    ("pass", "version in the name", "OFL-1.1.txt",
+     "components " + BAR + " changed " + BAR + " or"),
+    ("pass", "dual-license variant", "LICENSE-APACHE",
+     "punctuation " + DD + " kept " + DD + " verbatim"),
+    ("pass", "inside a vendor tree", "vendor/foo/LICENSE.md",
+     "upstream " + DD + " wording " + DD + " kept"),
+    ("pass", "draft under a legal name is taken at its word", "license-notes.md",
+     "quoted " + DD + " terms " + DD + " kept"),
+    ("block", "same shape in authored prose", "f.txt",
+     "or substituting " + DD + " in part " + DD + " whole"),
+    ("block", "stem glued to a word is not a legal name", "noticeable.md",
+     "prose " + DD + " text " + DD + " here"),
+]
+
 
 def scratch_env(locale):
     # GIT_CONFIG_NOSYSTEM keeps the scratch repo off any system-level config.
@@ -107,7 +139,9 @@ def stage_and_run(line, locale, name="f.txt"):
         env = scratch_env(locale)
         subprocess.run(["git", "init", "-q", work], env=env, check=True)
         exempt_scratch(work, env)
-        with open(os.path.join(work, name), "w", encoding="utf-8") as fh:
+        target = os.path.join(work, name)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as fh:
             fh.write(line + "\n")
         subprocess.run(["git", "-C", work, "add", name], env=env, check=True)
         done = subprocess.run(
@@ -241,6 +275,13 @@ def main():
         failures += not ok
         print("  %-4s got=%-5s want=%-5s %s"
               % ("ok" if ok else "FAIL", got, want, name))
+    print("verbatim legal names")
+    for want, name, filename, content in LICENSE_CASES:
+        got = "block" if stage_and_run(content, "en_US.UTF-8", filename) != 0 else "pass"
+        ok = got == want
+        failures += not ok
+        print("  %-4s got=%-5s want=%-5s %s"
+              % ("ok" if ok else "FAIL", got, want, name))
     for name, check in (("printed fix hint", check_fix_hint),
                         ("staged gitlink", check_gitlink),
                         ("textconv not run", check_textconv)):
@@ -252,10 +293,10 @@ def main():
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
     print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
-          "plus the fix hint, staged-gitlink, and textconv cases. Knob inertness "
-          "and bypass advertisements across all three hooks live in "
-          "scripts/check-hook-knobs.py."
-          % (len(CASES), len(LOCALES), len(CODE_CASES)))
+          "%d legal-name cases, plus the fix hint, staged-gitlink, and textconv "
+          "cases. Knob inertness and bypass advertisements across all three hooks "
+          "live in scripts/check-hook-knobs.py."
+          % (len(CASES), len(LOCALES), len(CODE_CASES), len(LICENSE_CASES)))
     return 0
 
 

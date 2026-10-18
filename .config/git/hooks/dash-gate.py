@@ -10,6 +10,12 @@ for a dash. What gets checked depends on the file:
       only the comment text on added lines. ast-grep decides what a comment
       is, so a shell end-of-options marker or a BEM modifier class in code
       no longer trips the gate, while the same shape in a comment still does
+  verbatim legal text (LICENSE, LICENCE, COPYING, NOTICE, OFL stems)
+      not checked. A license's punctuation belongs to its licensor, and the
+      SIL OFL requires its text travel with the fonts it licenses. The named
+      fix would rewrite a legal document, which is worse than leaving the
+      line alone, so these names are taken at their word. Name-scoped, not
+      content-scoped; the same shape in authored prose still blocks.
 
 Unknown types default to strict on purpose: a file the gate cannot parse is
 treated as prose rather than waved through.
@@ -51,6 +57,18 @@ DASH_RE = re.compile(
     "[%s%s%s]|[ \t\r\f\v]%s[ \t\r\f\v]|[A-Za-z0-9]%s[A-Za-z0-9]"
     % (EM, EN, BAR, DD, DD)
 )
+
+# Verbatim legal text is exempt by name, not by content. A license's
+# punctuation belongs to its licensor: the SIL OFL defines "Modified Version"
+# with the double-hyphen shape this gate blocks (the SPDX text renders it
+# with em dashes, also blocked), and OFL requires its text travel with the
+# fonts it licenses. Rewriting it would falsify the license, so a file named
+# like a legal document is taken at its word. The stem must end the name or
+# be followed by a dot or a hyphen: LICENSE.txt, LICENSE-APACHE and
+# OFL-1.1.txt match, noticeable.md does not.
+# scripts/check-dash-gate.py pins the boundary in both directions.
+LICENSE_NAME = re.compile(r"^(licen[cs]e|copying|notice|ofl)([.\-].*)?$",
+                          re.IGNORECASE)
 
 FISH_REPO = "https://github.com/ram02z/tree-sitter-fish"
 FISH_REV = "b7f1d682941e0c62dfcd6bf9ef481638351bab16"
@@ -259,7 +277,8 @@ def comment_text(code_files, fish_parser_flag):
 
 
 def find_hits(fish_parser_flag=None):
-    added = added_lines()
+    added = {path: lines for path, lines in added_lines().items()
+             if not LICENSE_NAME.match(os.path.basename(path))}
     code = {}
     for path, lines in added.items():
         blob = decode(git("show", ":" + path))
