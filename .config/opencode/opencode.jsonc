@@ -122,11 +122,12 @@
       // Switch into this agent with:  /agent free
       // Free-tier fallback on OpenCode Zen. ~/.local/bin/opencode-auto runs
       // with --agent free when opencode-go is saturated, or on --free.
-      // Model matches taskferry's summary default (taskferry#608), picked
-      // 2026-10-03 by benchmarking every free Zen model.
-      "description": "Free-tier fallback on OpenCode Zen (opencode/muse-spark-1.3-contributor-free). Use when opencode-go is saturated or when explicitly asked for free.",
+      // Repointed 2026-10-18 from muse-spark-1.3-contributor-free, which
+      // left the live catalog. beam-free is verified live the same day:
+      // probe runs drove it directly and `opencode models` lists it.
+      "description": "Free-tier fallback on OpenCode Zen (opencode/beam-free). Use when opencode-go is saturated or when explicitly asked for free.",
       "mode": "primary",
-      "model": "opencode/muse-spark-1.3-contributor-free"
+      "model": "opencode/beam-free"
     },
     "title": { "disable": true }
   },
