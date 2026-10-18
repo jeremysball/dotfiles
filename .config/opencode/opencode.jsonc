@@ -973,11 +973,6 @@
   },
 
   "mcp": {
-    "kagi": {
-      "type": "local",
-      "command": ["uvx", "kagimcp"],
-      "enabled": true
-    },
     "playwright": {
       "type": "local",
       "command": ["npx", "@playwright/mcp@latest", "--config", "{env:HOME}/.config/playwright-mcp/config.json"],
