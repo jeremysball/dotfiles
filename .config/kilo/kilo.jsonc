@@ -27,17 +27,16 @@
   // models live under its existing "kilo" gateway provider as
   // `kilo/<vendor>/<model>:free`, per `kilo models | rg ':free'`.
   //
-  // minimax-m3:free, not nemotron-3.5-lightning:free. The lightning model
-  // was picked for raw speed, but compaction is the one housekeeping call
-  // where quality matters more than latency: a weak summarizer silently
-  // drops detail and the resumed session has no way to know. minimax-m3 is
-  // the account's standard-tier workhorse (Reasoning 74.5 vs lightning's
-  // tiny fast model) and is still free, so it costs nothing extra and
-  // keeps housekeeping off the default model's ollama-cloud quota.
-  // Confirmed live: `kilo run --model kilo/minimax/minimax-m3:free` returns
-  // a correct summary.
+  // north-mini-code:free after the minimax-m3:free pin went dead: the id
+  // left the live kilo catalog (found 2026-10-18, repointed the same day).
+  // Quality still beats latency for compaction, the one housekeeping call
+  // where a weak summarizer silently drops detail and the resumed session
+  // has no way to know; that logic is also why lightning was rejected.
+  // The pin stays free, keeping housekeeping off the default model's
+  // ollama-cloud quota. Verified live 2026-10-18: `kilo models` lists
+  // kilo/cohere/north-mini-code:free among the :free ids.
   "model": "llmgateway/mimo-v2.6-pro",
-  "small_model": "kilo/minimax/minimax-m3:free",
+  "small_model": "kilo/cohere/north-mini-code:free",
   "permission": {
     "*": {
       "*": "allow"
