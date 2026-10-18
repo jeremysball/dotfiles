@@ -1,5 +1,5 @@
 {
-  "summaryModel": "llmgateway/mimo-v2.6-flash",
+  "summaryModel": "opencode/beam-free",
   "defaultExecutor": "opencode",
   "maxConcurrentTasks": 32,
   "noOutputTimeoutMs": 900000,
