@@ -17,13 +17,17 @@
 #
 # The pre-existing functions/claude.fish launches claude by absolute path
 # ($HOME/.local/bin/claude). This startup time definition shadows it in every
-# fish session, and `command claude` resolves the identical binary because
-# 00-path.fish puts $HOME/.local/bin on PATH globally.
+# fish session, and `env` execs the same binary from PATH (00-path.fish puts
+# $HOME/.local/bin there globally). The body must NOT call `command opencode`:
+# the command word is `env`, so fish would hand the literal word `command` to
+# env as the program to run (env: 'command': No such file or directory,
+# observed live 2026-10-18). No recursion either: the function calls env,
+# not opencode.
 
 function opencode --wraps opencode
-    env BASH_ENV="$HOME/.config/mise/agent-bash-env.sh" command opencode $argv
+    env BASH_ENV="$HOME/.config/mise/agent-bash-env.sh" opencode $argv
 end
 
 function claude --wraps claude
-    env BASH_ENV="$HOME/.config/mise/claude-bash-env.sh" command claude $argv
+    env BASH_ENV="$HOME/.config/mise/claude-bash-env.sh" claude $argv
 end
