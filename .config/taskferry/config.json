@@ -1,5 +1,5 @@
 {
-  "summaryModel": "opencode/muse-spark-1.3-contributor-free",
+  "summaryModel": "llmgateway/mimo-v2.6-flash",
   "defaultExecutor": "opencode",
   "maxConcurrentTasks": 32,
   "noOutputTimeoutMs": 900000,

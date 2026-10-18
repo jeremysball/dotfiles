@@ -578,14 +578,6 @@
     }
   },
   "mcp": {
-    "kagi": {
-      "type": "local",
-      "command": [
-        "uvx",
-        "kagimcp"
-      ],
-      "enabled": true
-    },
     "playwright": {
       "type": "local",
       "command": [
@@ -602,6 +594,25 @@
         "taskferry"
       ],
       "enabled": false
+    },
+    "servers": {
+      "chrome-devtools": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "chrome-devtools-mcp@1.11.0",
+          "--browserUrl",
+          "http://127.0.0.1:9222",
+          "--no-usage-statistics",
+          "--no-performance-crux",
+          "--redact-network-headers"
+        ]
+      },
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp"
+      }
     }
   }
 }
