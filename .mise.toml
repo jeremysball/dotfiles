@@ -29,3 +29,10 @@ run = "python3 scripts/check-hook-knobs.py"
 [tasks.check-git-hooks]
 description = "Run both hook checkers (dash matrix, then knob and advertisement checks)"
 depends = ["check-dash-gate", "check-hook-knobs"]
+
+# The umbrella task the global pre-commit hook looks for. Without it the hook
+# prints "no check task declared" on every commit in this repo, which is false:
+# check-git-hooks is the boundary gate.
+[tasks.check]
+description = "Run this repo's commit-boundary checks"
+depends = ["check-git-hooks"]

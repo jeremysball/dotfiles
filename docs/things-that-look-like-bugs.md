@@ -179,3 +179,21 @@ outside */shell-snapshots/*, or if Claude Code stops sourcing the snapshot via
 `source` (then activation would run before the snapshot again and the frozen
 PATH would silently win; the symptom is `node -v` reporting the global version
 inside a project pin).
+
+## The commit-boundary checks are machine-wide, not repo-scoped
+
+**What you will observe.** Every commit in a repo with no `mise` check task
+prints `pre-commit: no check task declared; repo-local hooks may still run.`
+Staging `.gitmodules` or a `skills/` gitlink in an unrelated repo runs
+`check-index.py` against `~/.claude/skills` and can print warnings about skills
+that repo does not contain.
+
+**Why it is deliberate.** The hook is global, and both checks guard a
+machine-wide invariant: a repo's own gate, and the development-skill index.
+The index check only fires when the commit changes the skill topology, and it
+is warn-only. The notice is one line on stderr because silence is how a repo
+with no gate stays invisible.
+
+**When it becomes a real bug.** If the index check blocks a commit, if the
+notice appears in a repo that does declare a check task, or if a warning names
+a repo-relative path as missing when the path exists in `~/.claude/skills`.

@@ -151,40 +151,99 @@ fi
 # 03-checks.md. The skill repo is private and CI cannot see the tree this
 # machine actually has, so the global hook is the only caller that can run
 # the check unasked. Limit it to commits that change the belief: a staged
-# skills/ gitlink or a staged .gitmodules. A machine without dotclaude skips
-# the whole section.
-index_check="$HOME/.claude/skills/developing-software/bin/check-index.py"
-if [ -f "$index_check" ]; then
-  if git diff --cached --raw --diff-filter=ACMRTUXB 2>/dev/null \
-      | awk '$2 == "160000" && $6 ~ /^skills\// { found=1 } END { exit !found }' \
-    || git diff --cached --name-only --diff-filter=ACMRTUXB 2>/dev/null \
-      | awk '$0 == ".gitmodules" { found=1 } END { exit !found }'; then
+# skills/ gitlink, a staged .gitmodules, or the deletion of either. A
+# machine without the helper says so instead of failing open in silence.
+index_check="${GIT_COMMIT_BOUNDARY_INDEX_CHECK:-$(git config --get commitBoundary.indexCheck 2>/dev/null || true)}"
+: "${index_check:=$HOME/.claude/skills/developing-software/bin/check-index.py}"
+
+index_trigger=0
+if git -c core.quotePath=false diff --cached --raw --no-textconv --no-ext-diff \
+    --diff-filter=ACDMRTUXB 2>/dev/null \
+    | awk '
+        function is_skill(p) { return p ~ /(^|\/)skills\// }
+        {
+          old_mode=$1; new_mode=$2; old_path=$6; new_path=$7
+          if ((old_mode == ":160000" || new_mode == "160000") \
+              && (is_skill(old_path) || is_skill(new_path))) { found=1 }
+          if (old_path == ".gitmodules" || new_path == ".gitmodules") { found=1 }
+        }
+        END { exit !found }
+      '; then
+  index_trigger=1
+fi
+
+if [ "$index_trigger" = 1 ]; then
+  if [ -f "$index_check" ]; then
     python3 "$index_check" --warn \
       || echo "pre-commit: check-index could not run" >&2
+  else
+    echo "pre-commit: check-index skipped (no helper at $index_check)" >&2
   fi
 fi
 
 # --- 7. repo check task (mise) ---
 # Layer 2 of the same ledger: each governed repo declares one check task and
-# the hook runs the whole task, not a hand-picked subset. Read mise's own
-# task list so a task in mise.toml, .mise.toml, or an included config all
-# count, while a task inherited from the global config does not. A failing
-# check blocks the commit and names itself through mise's own output.
+# the hook runs the whole task, not a hand-picked subset. `tasks ls --local
+# --hidden` lists every non-global task, including hidden ones; the source
+# filter then drops tasks inherited from an ancestor directory, so only a
+# config inside this repo counts. A task in an untrusted config is reported,
+# not executed, because `mise run` would trust that config on the spot. A
+# failed listing is reported as unknown, never read as "no task". GIT_DIR and
+# friends are unset for the same reason pre-push unsets them: git exports
+# them absolute in a linked worktree.
 check_declared=0
+check_unknown=""
 if command -v mise >/dev/null 2>&1; then
-  if mise -C "$repo_root" tasks --json 2>/dev/null \
+  if mise_tasks="$(mise -C "$repo_root" tasks ls --local --hidden --json 2>/dev/null)"; then
+    check_parse=0
+    printf '%s' "$mise_tasks" \
       | python3 -c 'import json, sys
-tasks = json.load(sys.stdin)
-sys.exit(0 if any(t.get("name") == "check" and not t.get("global") for t in tasks) else 1)'; then
-    check_declared=1
+root = sys.argv[1].rstrip("/") + "/"
+try:
+    tasks = json.load(sys.stdin)
+except Exception:
+    sys.exit(2)
+sys.exit(0 if any(
+    t.get("name") == "check" and str(t.get("source", "")).startswith(root)
+    for t in tasks
+) else 1)' "$repo_root" 2>/dev/null \
+      || check_parse=$?
+    case "$check_parse" in
+      0) check_declared=1 ;;
+      1) ;;
+      *) check_unknown="mise returned an unreadable task list" ;;
+    esac
+  else
+    check_unknown="mise could not list this repo's tasks"
   fi
+else
+  check_unknown="mise is not on PATH"
 fi
 
 if [ "$check_declared" = 1 ]; then
-  mise -C "$repo_root" run check || exit 1
+  if mise trust --show 2>/dev/null \
+      | awk -v root="$repo_root" -v home="$HOME" \
+          '{ gsub(/^~/, home) } $0 == root ": trusted" { found=1 } END { exit !found }'; then
+    check_warn="${GIT_COMMIT_BOUNDARY_CHECK_WARN:-$(git config --get commitBoundary.checkWarn 2>/dev/null || true)}"
+    if [ "$check_warn" = "1" ] || [ "$check_warn" = "true" ]; then
+      if ! ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+             mise -C "$repo_root" run check ); then
+        echo "pre-commit: check task failed (warning mode); commit continues." >&2
+      fi
+    else
+      ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+        mise -C "$repo_root" run check ) || exit 1
+    fi
+  else
+    echo "pre-commit: check task declared but $repo_root is untrusted; run mise trust to enable it." >&2
+  fi
 else
   # --- 8. no-check notice ---
-  echo "pre-commit: no check task declared; this repo has no commit-boundary check (mise run check)." >&2
+  if [ -n "$check_unknown" ]; then
+    echo "pre-commit: could not determine whether a check task is declared ($check_unknown); commit continues unchecked." >&2
+  else
+    echo "pre-commit: no check task declared; repo-local hooks may still run." >&2
+  fi
 fi
 
 # --- 9. chain to repo-local pre-commit if present ---
