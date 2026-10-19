@@ -67,6 +67,101 @@ CODE_CASES = [
     ("block", "markdown stays prose", "a.md", "run foo " + DD + " bar"),
 ]
 
+# Verbatim legal text is exempt by name, prose only: the boundary and the
+# reasoning live in dash-gate.py beside LEGAL_TOKEN. What the cases pin: a
+# legal name commits the upstream shape, the same shape in authored prose
+# blocks, and a comment in a legal-named code file still blocks.
+LICENSE_CASES = [
+    ("pass", "license keeps the upstream shape", "LICENSE.txt",
+     "or substituting " + DD + " in part " + DD + " whole"),
+    ("pass", "licence spelling", "LICENCE",
+     "deleting " + DD + " or " + DD + " components"),
+    ("pass", "bare copying name", "COPYING",
+     "redistribute " + EM + " verbatim " + EM + " text"),
+    ("pass", "notice with extension", "NOTICE.txt",
+     "attributed " + EN + " as " + EN + " required"),
+    ("pass", "version in the name", "OFL-1.1.txt",
+     "components " + BAR + " changed " + BAR + " or"),
+    ("pass", "dual-license variant", "LICENSE-APACHE",
+     "punctuation " + DD + " kept " + DD + " verbatim"),
+    ("pass", "inside a vendor tree", "vendor/foo/LICENSE.md",
+     "upstream " + DD + " wording " + DD + " kept"),
+    ("pass", "unlicense stem", "UNLICENSE",
+     "this is free and unencumbered " + DD + " released"),
+    ("pass", "copyright stem", "COPYRIGHT",
+     "all rights reserved " + DD + " per year"),
+    ("pass", "plural stem under a licences directory", "LICENSES/Apache-2.0.txt",
+     "Licensed under the Apache License " + DD + " Version 2.0"),
+    ("pass", "identifier before the stem", "MIT-LICENSE.txt",
+     "Permission is hereby granted " + DD + " free of charge"),
+    ("pass", "identifier after the stem, underscore", "LICENSE_APACHE",
+     "Licensed under the Apache License " + DD + " Version 2.0"),
+    ("pass", "underscore separator", "OFL_1.1.txt",
+     "the Font Software " + DD + " modified " + DD + " version"),
+    ("pass", "gnu lesser name", "COPYING.LESSER",
+     "Additional permissions under the GNU Lesser " + EM + " License"),
+    ("pass", "gnu version glued to the stem", "COPYINGv3",
+     "under the terms of version 3 " + DD + " or later"),
+    ("pass", "camel case notices bundle", "ThirdPartyNotices.txt",
+     "This product includes software developed by " + DD + " others"),
+    ("pass", "spdx identifier name", "CC-BY-4.0.txt",
+     "Creative Commons Attribution 4.0 " + DD + " public"),
+    ("pass", "spdx identifier with a qualifier", "GPL-3.0-or-later.txt",
+     "either version 3 of the License " + DD + " or any later"),
+    ("pass", "spdx expression with a clause word", "BSD-3-Clause.txt",
+     "Redistributions of source code " + DD + " retain this notice"),
+    ("pass", "unambiguous identifier alone", "MIT.txt",
+     "Permission is hereby granted " + DD + " free of charge"),
+    ("pass", "bare family identifier alone", "LGPL.txt",
+     "GNU Lesser General Public License " + DD + " version 2.1"),
+    ("pass", "bare gpl name", "gpl.md",
+     "GNU General Public License " + DD + " version 3"),
+    ("pass", "letter suffix identifier", "CeCILL-B.txt",
+     "contrat de licence " + DD + " libre"),
+    ("pass", "eupl identifier with a version", "EUPL-1.2.txt",
+     "European Union Public Licence " + DD + " v1.2"),
+    ("pass", "unlicence spelling of the unlicense stem", "UNLICENCE",
+     "this is free and unencumbered " + DD + " released"),
+    ("pass", "eula stem", "EULA.txt",
+     "End " + DD + " User License Agreement"),
+    ("pass", "patents stem", "PATENTS",
+     "patent " + DD + " grant"),
+    ("block", "unknown extension on a legal stem is checked", "COPYING.pl",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "one letter extension is not a document shape", "LICENSE.x",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "version shaped extension is not a document shape", "LICENSE.1",
+     "prose " + DD + " text " + DD + " here"),
+    ("pass", "identifier with a version", "Apache-2.0.md",
+     "Licensed under the Apache License " + DD + " Version 2.0"),
+    ("block", "two modifier words are not a license name", "or-later.txt",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "cc modifiers alone are not a license name", "by-sa.txt",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "authored notes under a legal name", "license-notes.md",
+     "quoted " + DD + " terms " + DD + " kept"),
+    ("block", "authored readme under an ofl name", "ofl-README",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "authored rules under a notice name", "NOTICE-rules.txt",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "authored generator under a notice name", "notice-generator.py",
+     'print("x")  # a ' + DD + " b"),
+    ("block", "authored check under a license name", "license-check.sh",
+     "true  # a " + EM + " b"),
+    ("block", "one modifying word is not a legal name", "library.md",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "same shape in authored prose", "f.txt",
+     "or substituting " + DD + " in part " + DD + " whole"),
+    ("block", "stem glued to a word is not a legal name", "noticeable.md",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "comment in a legal-named code file", "license.py",
+     "x = 1  # a" + DD + "b"),
+    ("block", "comment in a legal-named shell file", "ofl.sh",
+     "true  # a " + EM + " b"),
+    ("pass", "code in a legal-named file is not a comment", "notice.py",
+     'x = "a ' + DD + ' b"'),
+]
+
 
 def scratch_env(locale):
     # GIT_CONFIG_NOSYSTEM keeps the scratch repo off any system-level config.
@@ -107,7 +202,9 @@ def stage_and_run(line, locale, name="f.txt"):
         env = scratch_env(locale)
         subprocess.run(["git", "init", "-q", work], env=env, check=True)
         exempt_scratch(work, env)
-        with open(os.path.join(work, name), "w", encoding="utf-8") as fh:
+        target = os.path.join(work, name)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w", encoding="utf-8") as fh:
             fh.write(line + "\n")
         subprocess.run(["git", "-C", work, "add", name], env=env, check=True)
         done = subprocess.run(
@@ -117,6 +214,15 @@ def stage_and_run(line, locale, name="f.txt"):
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
+
+def outcome(code):
+    """0 is a pass, 1 is an enforced block. Any other exit means the gate
+    could not run (it exits 2 on that) and must satisfy neither expectation."""
+    if code == 0:
+        return "pass"
+    if code == 1:
+        return "block"
+    return "error-%d" % code
 
 
 def scratch_repo(lines, locale):
@@ -140,8 +246,9 @@ def check_fix_hint():
     try:
         blocked = subprocess.run(["bash", HOOK], cwd=work, env=env,
                                  capture_output=True, text=True)
-        if blocked.returncode == 0:
-            return "hook did not block the offending lines"
+        got = outcome(blocked.returncode)
+        if got != "block":
+            return "hook did not block the offending lines (got %s)" % got
         printed = blocked.stdout.splitlines() + blocked.stderr.splitlines()
         hint = next((ln.strip() for ln in printed
                      if "sed -E" in ln), None)
@@ -156,8 +263,9 @@ def check_fix_hint():
         subprocess.run(["git", "-C", work, "add", "f.txt"], env=env, check=True)
         again = subprocess.run(["bash", HOOK], cwd=work, env=env,
                                capture_output=True, text=True)
-        if again.returncode != 0:
-            return "gate still blocks after running its own hint"
+        got = outcome(again.returncode)
+        if got != "pass":
+            return "gate still blocks after running its own hint (got %s)" % got
         return None
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -182,8 +290,9 @@ def check_gitlink():
                         "--cacheinfo", "160000,%s,sub" % sha], env=env, check=True)
         done = subprocess.run(["bash", HOOK], cwd=work, env=env,
                               capture_output=True, text=True)
-        if done.returncode != 0:
-            return "staged gitlink blocked: %s" % done.stderr.strip()[:200]
+        got = outcome(done.returncode)
+        if got != "pass":
+            return "staged gitlink %s: %s" % (got, done.stderr.strip()[:200])
         return None
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -214,8 +323,9 @@ def check_textconv():
                         "secret.gpg", "tool.sh"], env=env, check=True)
         done = subprocess.run(["bash", HOOK], cwd=work, env=env,
                               capture_output=True, text=True)
-        if done.returncode != 0:
-            return "staged textconv file blocked: %s" % done.stderr.strip()[:200]
+        got = outcome(done.returncode)
+        if got != "pass":
+            return "staged textconv file %s: %s" % (got, done.stderr.strip()[:200])
         return None
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -229,18 +339,25 @@ def main():
     for locale in LOCALES:
         print("locale %s" % locale)
         for want, name, line in CASES:
-            got = "block" if stage_and_run(line, locale) != 0 else "pass"
+            got = outcome(stage_and_run(line, locale))
             ok = got == want
             failures += not ok
             print("  %-4s got=%-5s want=%-5s %s"
                   % ("ok" if ok else "FAIL", got, want, name))
-    print("code files")
-    for want, name, filename, content in CODE_CASES:
-        got = "block" if stage_and_run(content, "en_US.UTF-8", filename) != 0 else "pass"
-        ok = got == want
-        failures += not ok
-        print("  %-4s got=%-5s want=%-5s %s"
-              % ("ok" if ok else "FAIL", got, want, name))
+        print("code files (%s)" % locale)
+        for want, name, filename, content in CODE_CASES:
+            got = outcome(stage_and_run(content, locale, filename))
+            ok = got == want
+            failures += not ok
+            print("  %-4s got=%-5s want=%-5s %s"
+                  % ("ok" if ok else "FAIL", got, want, name))
+        print("verbatim legal names (%s)" % locale)
+        for want, name, filename, content in LICENSE_CASES:
+            got = outcome(stage_and_run(content, locale, filename))
+            ok = got == want
+            failures += not ok
+            print("  %-4s got=%-5s want=%-5s %s"
+                  % ("ok" if ok else "FAIL", got, want, name))
     for name, check in (("printed fix hint", check_fix_hint),
                         ("staged gitlink", check_gitlink),
                         ("textconv not run", check_textconv)):
@@ -251,11 +368,11 @@ def main():
     if failures:
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
-    print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
-          "plus the fix hint, staged-gitlink, and textconv cases. Knob inertness "
-          "and bypass advertisements across all three hooks live in "
-          "scripts/check-hook-knobs.py."
-          % (len(CASES), len(LOCALES), len(CODE_CASES)))
+    print("\ncheck-dash-gate: %d prose, %d code-file, and %d legal-name cases "
+          "pass in %d locales each, plus the fix hint, staged-gitlink, and "
+          "textconv cases. Knob inertness and bypass advertisements across all "
+          "three hooks live in scripts/check-hook-knobs.py."
+          % (len(CASES), len(CODE_CASES), len(LICENSE_CASES), len(LOCALES)))
     return 0
 
 

@@ -8,7 +8,8 @@
 #
 # Six jobs, in order:
 #   1. Dash gate: block staged em/en dashes and double-hyphen stand-ins,
-#      in prose files and in code comments (dash-gate.py).
+#      in prose files and in code comments (dash-gate.py). Prose named as
+#      verbatim legal text is the one exemption.
 #      No bypass, by user directive 2026-10-11: fix the flagged line.
 #   2. Hardcoded absolute path gate: block a staged code line that hardcodes
 #      /home/..., /workspace/..., a username, or a hostname, per CLAUDE.md's
@@ -41,6 +42,10 @@ DEFAULT_REQUIRE_LINKED=true
 # and the file handling live in dash-gate.py next to this hook: prose files are
 # checked line by line, code files only in their comments (ast-grep decides
 # what a comment is), so a shell end-of-options double hyphen is not a dash.
+# Prose files named like verbatim legal text are exempt by name; a code file
+# is checked in its comments whatever it is called. The boundary and the
+# reasoning are in dash-gate.py beside LEGAL_TOKEN, pinned by
+# scripts/check-dash-gate.py.
 # Resolve through the symlink: [dotfiles] links this hook into
 # ~/.config/git/hooks, and dash-gate.py sits beside the real file.
 # The SKIP_DASH_CHECK family of env hatches was removed 2026-10-11 by user
