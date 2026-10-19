@@ -10,9 +10,18 @@ for a dash. What gets checked depends on the file:
       only the comment text on added lines. ast-grep decides what a comment
       is, so a shell end-of-options marker or a BEM modifier class in code
       no longer trips the gate, while the same shape in a comment still does
+  verbatim legal text (LICENSE, COPYING, NOTICE, OFL, UNLICENSE, COPYRIGHT,
+      EULA, PATENTS, DISCLAIMER stems, or a bare license identifier)
+      not checked, prose only: a code file is checked for comment text
+      whatever it is called. The name has to be document shaped too (no
+      extension, a document extension, or an identifier word as in
+      COPYING.LESSER), so an unknown extension on a legal stem, COPYING.pl,
+      is checked like any other unknown file. The boundary
+      and the reasoning live in the comment on LEGAL_TOKEN.
 
 Unknown types default to strict on purpose: a file the gate cannot parse is
-treated as prose rather than waved through.
+treated as prose and checked line by line. The legal name class above is the
+one exemption, and it needs a document shape to fire.
 
 Fish has no built-in ast-grep grammar. tree-sitter-fish is compiled from a
 pinned commit the first time a fish file is staged, into the XDG cache. If
@@ -51,6 +60,61 @@ DASH_RE = re.compile(
     "[%s%s%s]|[ \t\r\f\v]%s[ \t\r\f\v]|[A-Za-z0-9]%s[A-Za-z0-9]"
     % (EM, EN, BAR, DD, DD)
 )
+
+# Verbatim legal text is exempt by name, not by content. A license's
+# punctuation belongs to its licensor: the SIL OFL defines "Modified Version"
+# with the double-hyphen shape this gate blocks (the SPDX text renders it
+# with em dashes, also blocked), and OFL requires its text travel with the
+# fonts it licenses. Rewriting it would falsify the license, so a file whose
+# name names a legal document is taken at its word. Prose files only: a code
+# file is checked for comment text whatever it is called, because a comment is
+# authored whoever owns the repository.
+#
+# The boundary the name has to clear: a legal token ends the name, or is
+# followed only by versions, document extensions, and license identifiers or
+# the words that qualify them. Words before the token are unrestricted
+# (font-LICENSE.txt, ThirdPartyNotices.txt, LICENSES/Apache-2.0.txt); an
+# ordinary word after it is not (ofl-README, NOTICE-rules.txt,
+# license-notes.md). The extension is part of the name and has to be document
+# shaped (a document extension, empty, or an identifier word as in
+# COPYING.LESSER), so an unknown extension on a legal stem (COPYING.pl, or a
+# one letter or version shaped one like LICENSE.x and LICENSE.1) is ordinary
+# prose. A bare name of identifiers names a license too
+# (GPL-3.0.txt, CC-BY-4.0.txt, MIT.txt, CeCILL-B.txt).
+# scripts/check-dash-gate.py pins the boundary in both directions.
+LEGAL_TOKEN = re.compile(r"licen[cs]es?|unlicen[cs]es?|copying|copyright"
+                         r"|notices?|ofl|eula|patents|disclaimers?",
+                         re.IGNORECASE)
+# A license identifier. CC's by, sa and nd modify cc; they never name a
+# license on their own, so they are modifiers, not identifiers. lesser and
+# library only qualify another identifier (COPYING.LESSER).
+LEGAL_ID_WORDS = (r"cc0?|mit|apache|bsd|isc|epl|mpl|gpl|lgpl|agpl|bsl|zlib"
+                  r"|wtfpl|artistic|eupl|osl|cecill|ncsa")
+LEGAL_ID = re.compile("%s|lesser|library" % LEGAL_ID_WORDS, re.IGNORECASE)
+# A document extension. Accepted after a legal token and as the extension of
+# a legal name.
+DOC_EXT = re.compile(r"txt|md|markdown|rst|html|text", re.IGNORECASE)
+# Versions, document extensions, and the words that modify an identifier
+# (the rest of an SPDX expression: BSD-3-Clause, GPL-3.0-or-later, plus the
+# letter suffix on CeCILL-B).
+LEGAL_MODIFIER = re.compile(r"v?\d[\w.]*|%s|by|sa|nd"
+                            r"|sampling|or|later|only|no|generic|with|clause"
+                            r"|exception|classpath|[a-z]" % DOC_EXT.pattern,
+                            re.IGNORECASE)
+# Anything that may follow a legal token, or sit in a bare identifier name.
+LEGAL_QUALIFIER = re.compile("(?:%s)|(?:%s)"
+                             % (LEGAL_ID.pattern, LEGAL_MODIFIER.pattern),
+                             re.IGNORECASE)
+# Every identifier names a bare license file by itself (MIT.txt, GPL.txt,
+# CeCILL-B.txt). The only identifiers that stay out are the two that merely
+# modify another name: a bare library.md names nothing. This is one table
+# with LEGAL_ID, not a second hand-maintained list.
+LEGAL_ID_ALONE = re.compile(LEGAL_ID_WORDS, re.IGNORECASE)
+# Words break on the usual separators, on a camel-case hump (a capital that
+# starts a new word, so ThirdPartyNotices splits and CeCILL stays whole), and
+# before a glued version, so COPYINGv3 reads as COPYING plus v3.
+WORD_BREAK = re.compile(r"[.\-_]|(?<=[a-z0-9])(?=[A-Z][a-z])"
+                        r"|(?<![vV])(?<=[A-Za-z])(?=[vV]?[0-9])")
 
 FISH_REPO = "https://github.com/ram02z/tree-sitter-fish"
 FISH_REV = "b7f1d682941e0c62dfcd6bf9ef481638351bab16"
@@ -159,6 +223,31 @@ def language_of(path, first_line):
     return None
 
 
+def is_legal_text_name(path):
+    """True when path's basename names a verbatim legal document.
+
+    The boundary, the reasoning, and the document-shape rule for the
+    extension are all in the comment on LEGAL_TOKEN. This function is the
+    mechanics of that one definition.
+    """
+    base = os.path.basename(path)
+    stem, ext = os.path.splitext(base)
+    ext = ext[1:]
+    if ext and not DOC_EXT.fullmatch(ext) and not LEGAL_ID.fullmatch(ext):
+        return False
+    words = [w for w in WORD_BREAK.split(stem) if w]
+    if not words:
+        return False
+    for i in range(len(words) - 1, -1, -1):
+        if LEGAL_TOKEN.fullmatch(words[i]):
+            return all(LEGAL_QUALIFIER.fullmatch(w) for w in words[i + 1:])
+    if not all(LEGAL_QUALIFIER.fullmatch(w) for w in words):
+        return False
+    if len(words) == 1:
+        return LEGAL_ID_ALONE.fullmatch(words[0]) is not None
+    return any(LEGAL_ID.fullmatch(w) for w in words)
+
+
 def resolve_fish_parser(flag):
     explicit = flag or os.environ.get("DASH_GATE_FISH_PARSER")
     if not explicit:
@@ -260,15 +349,19 @@ def comment_text(code_files, fish_parser_flag):
 
 def find_hits(fish_parser_flag=None):
     added = added_lines()
-    code = {}
-    for path, lines in added.items():
+    code, verbatim = {}, set()
+    for path in added:
         blob = decode(git("show", ":" + path))
         lang = language_of(path, blob.split("\n", 1)[0])
         if lang is not None:
             code[path] = (lang, blob)
+        elif is_legal_text_name(path):
+            verbatim.add(path)
     comments = comment_text(code, fish_parser_flag) if code else {}
     hits = []
     for path in sorted(added):
+        if path in verbatim:
+            continue
         for lineno, text in sorted(added[path].items()):
             checked = comments[path].get(lineno, "") if path in code else text
             if DASH_RE.search(FAKE_SPACES.sub(" ", checked)):

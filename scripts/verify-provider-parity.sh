@@ -73,9 +73,17 @@ REQUEST_ONLY_PATTERNS=("deepseek-v4-pro" "nanogpt/" "llmgateway/")
 # Models promoted out of request-only by explicit user directive. 2026-10-08:
 # llmgateway/mimo-v2.6-pro became the fleet default (opencode and kilo root
 # `model`) when the ollama-cloud default deepseek-v4-flash:0731 was retired
-# upstream. This is the only exemption; every other model matching the
-# patterns above stays request-only.
-REQUEST_ONLY_EXEMPT=("llmgateway/mimo-v2.6-pro")
+# upstream.
+#
+# 2026-10-19: llmgateway/glm-5.3-flash became kilo's `small_model`, the route
+# that summarizes a context when kilo compacts. That call has to be able to
+# hold the context it is summarizing: the previous pin,
+# kilo/cohere/north-mini-code:free, had a smaller window than the point where
+# compaction fires, so every compaction attempt overflowed and the session
+# died with "Compaction exhausted". The flash tier is the cheapest route on
+# the gateway ($0.088/$0.25 per Mtok) with a 1M window, and a compaction
+# costs well under two cents.
+REQUEST_ONLY_EXEMPT=("llmgateway/mimo-v2.6-pro" "llmgateway/glm-5.3-flash")
 
 # Which harnesses must actually register each request-only pattern. nanogpt
 # is opencode+kilo only (pi carries no nanogpt provider, same "-" as in
@@ -370,8 +378,13 @@ def load_jsonc(path):
 
 PATTERNS = ("deepseek-v4-pro", "nanogpt/", "llmgateway/")
 # Kept in sync with REQUEST_ONLY_EXEMPT in the bash half: promoted to fleet
-# default 2026-10-08 by user directive, see that comment for the history.
-EXEMPT = ("llmgateway/mimo-v2.6-pro",)
+# defaults by explicit user directive, see that comment for the history.
+# 2026-10-19: llmgateway/glm-5.3-flash became kilo's small_model, the route
+# kilo summarizes a context with when it compacts. That call has to hold the
+# context it summarizes: the previous pin had a smaller window than the
+# compaction trigger point, so every compaction attempt overflowed and the
+# session died with "Compaction exhausted".
+EXEMPT = ("llmgateway/mimo-v2.6-pro", "llmgateway/glm-5.3-flash")
 
 def is_request_only(model):
     if model in EXEMPT:

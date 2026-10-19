@@ -21,6 +21,10 @@ description = "Run the pre-commit dash gate's block/pass matrix (scripts/check-d
 tools = { ast-grep = "0.44.1" }
 run = "python3 scripts/check-dash-gate.py"
 
+[tasks.check-fleet-context-cap]
+description = "Assert every llmgateway route in the fleet configs is capped at 200k (scripts/check-fleet-context-cap.py)"
+run = "python3 scripts/check-fleet-context-cap.py"
+
 [tasks.check-hook-knobs]
 description = "Assert the hooks honor no bypass knob and advertise none (scripts/check-hook-knobs.py)"
 tools = { ast-grep = "0.44.1" }

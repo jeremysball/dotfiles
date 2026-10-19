@@ -84,11 +84,50 @@ literal is not checked, because telling a user-facing string from a format
 string or a test fixture needs more than a parser.
 
 A file ast-grep cannot parse (markdown, TOML, an unknown extension) is checked
-line by line, as before. Unknown means strict, never skipped.
+line by line, as before. Unknown means strict: the one exemption is by name,
+the verbatim legal text entry below, and it needs a document shape to fire. A
+legal stem with an unknown extension, like `COPYING.pl`, is checked like any
+other unknown file.
 
 **When it becomes a real bug.** If a comment with an em dash gets through, or
 if a code file is checked line by line again. `python3
 scripts/check-dash-gate.py` covers both directions.
+
+## The dash gate lets a license file keep its double hyphens
+
+**What you will observe.** `LICENSE.txt`, `LICENCE`, `COPYING`, `NOTICE.txt`,
+`OFL-1.1.txt`, `LICENSE-APACHE`, `UNLICENSE`, `UNLICENCE`, `COPYRIGHT`,
+`EULA.txt`, `PATENTS`, `LICENSES/Apache-2.0.txt`, and `ThirdPartyNotices.txt`
+commit untouched with
+an em dash or a spaced double hyphen in them, while the same characters in the
+file next door block the commit. Bundled Lexica Ultralegible fonts brought
+this up: the SIL OFL text that ships with them defines "Modified Version" with
+the exact shape the gate exists to block. A code file is the exception: a
+comment in `license.py` or `notice.sh` still blocks, because a comment is
+authored whoever owns the repository.
+
+**Why it is deliberate.** A license's punctuation belongs to its licensor.
+The SIL OFL requires its text travel with the fonts it licenses, and the
+gate's own remedy (replace it with a comma, period, or colon) would falsify
+a legal document. So the gate takes a prose file at its word when its name
+names a legal document: a legal token ends the name, or is followed only by
+versions, document extensions, and license identifiers or the words that
+qualify them. Words before the token are allowed, which is why
+`font-LICENSE.txt` and `ThirdPartyNotices.txt` qualify; an ordinary word after
+it is not, so `ofl-README`, `NOTICE-rules.txt`, and `license-notes.md` are
+checked like any other prose. A bare name of identifiers counts too, which is
+how `GPL-3.0.txt`, `CC-BY-4.0.txt`, `BSD-3-Clause.txt`, `MIT.txt`, and
+`LGPL.txt` qualify while `or-later.txt` and `by-sa.txt` do not (nothing but
+the words that qualify an identifier). The extension has to be document
+shaped as well (a document extension, none at all, or an identifier word as in
+`COPYING.LESSER`), so `COPYING.pl` is checked like any other unknown file.
+
+**When it becomes a real bug.** If an authored file gets through because its
+name is nothing but license words, that is the boundary working as written;
+renaming it to `MIT-notes.md` brings it back under the gate. If an ordinary
+word ever counts as a qualifier, so `ofl-README` or `license-notes.md` commits
+a dash, or if a comment in a legal-named code file stops being checked, it is a
+bug. `python3 scripts/check-dash-gate.py` pins both directions.
 
 ## The first commit of a fish file pauses to compile something
 
@@ -202,3 +241,34 @@ staged-only gate would need a temporary index or worktree.
 **When it becomes a real bug.** If the index check blocks a commit, if the
 notice appears in a repo that does declare a check task, or if a warning names
 a repo-relative path as missing when the path exists in `~/.claude/skills`.
+
+## Every dispatch route is capped at 200k even though the provider serves 1M
+
+**What a reader will observe.** `.config/opencode/opencode.json`,
+`.config/opencode/opencode.jsonc` and `.config/kilo/kilo.jsonc` give every
+route a `limit.context` of 200000, or the route's own native window when that
+is smaller (128000 for `gpt-4o`, for example). The gateway's catalog reports a
+native window of up to 1,050,000 tokens for the same models, and
+`gpt-6.1-sol` in particular was capped at 500k until 2026-10-19.
+
+**Why it is deliberate.** The 200k cap is the fleet's budget, not the
+provider's window. A configured `limit.context` is what makes the harness
+compact: an uncapped route inherits the catalog window, so a session on it
+grows past 200k without ever triggering compaction. That is exactly what the
+2026-10-18 burn did, reaching 661,706 tokens per step with zero compaction
+events. The harness merges the provider catalog over the config at runtime, so
+a route nobody declared is still dispatchable, just uncapped.
+
+The cap covers all 144 routes the gateway serves, declared identically in all
+three fleet configs. Routes on providers the fleet does not dispatch on keep
+their own windows, and the check reports them rather than clamping them: the
+decision-model paths that use those routes chose those windows. Where two
+copies of one route disagreed, the lower number wins, so a route cannot be
+capped in one file and uncapped in the next.
+
+**When it becomes a real bug.** If the fleet's real budget grows past 200k,
+the cap and `scripts/check-fleet-context-cap.py` have to move together. The
+check fails when a route has no limit, when one exceeds the cap, when the
+three configs declare different route sets, and when the summarizer's window
+is smaller than the point where compaction fires. It exits 2, not 0, when the
+gateway catalog cannot be read: a check that could not look has not passed.
