@@ -10,14 +10,17 @@ for a dash. What gets checked depends on the file:
       only the comment text on added lines. ast-grep decides what a comment
       is, so a shell end-of-options marker or a BEM modifier class in code
       no longer trips the gate, while the same shape in a comment still does
-  verbatim legal text (LICENSE, COPYING, NOTICE, OFL, UNLICENSE, COPYRIGHT
-      stems, or a bare SPDX identifier)
+  verbatim legal text (LICENSE, COPYING, NOTICE, OFL, UNLICENSE, COPYRIGHT,
+      EULA, PATENTS, DISCLAIMER stems, or a bare license identifier)
       not checked, prose only: a code file is checked for comment text
-      whatever it is called. The boundary and the reasoning live in the
-      comment on LEGAL_TOKEN.
+      whatever it is called. The name has to be document shaped too (no
+      extension or a document extension), so an unknown extension on a legal
+      stem, COPYING.pl, is checked like any other unknown file. The boundary
+      and the reasoning live in the comment on LEGAL_TOKEN.
 
 Unknown types default to strict on purpose: a file the gate cannot parse is
-treated as prose rather than waved through.
+treated as prose and checked line by line. The legal name class above is the
+one exemption, and it needs a document shape to fire.
 
 Fish has no built-in ast-grep grammar. tree-sitter-fish is compiled from a
 pinned commit the first time a fish file is staged, into the XDG cache. If
@@ -71,32 +74,44 @@ DASH_RE = re.compile(
 # the words that qualify them. Words before the token are unrestricted
 # (font-LICENSE.txt, ThirdPartyNotices.txt, LICENSES/Apache-2.0.txt); an
 # ordinary word after it is not (ofl-README, NOTICE-rules.txt,
-# license-notes.md). A bare name of identifiers names a license too
-# (GPL-3.0.txt, CC-BY-4.0.txt).
+# license-notes.md). The extension is part of the name and has to be document
+# shaped (a document extension, empty, or itself a qualifier as in
+# COPYING.LESSER), so an unknown extension on a legal stem (COPYING.pl) is
+# ordinary prose. A bare name of identifiers names a license too
+# (GPL-3.0.txt, CC-BY-4.0.txt, MIT.txt, CeCILL-B.txt).
 # scripts/check-dash-gate.py pins the boundary in both directions.
-LEGAL_TOKEN = re.compile(r"licen[cs]es?|unlicense|copying|copyright|notices?|ofl",
+LEGAL_TOKEN = re.compile(r"licen[cs]es?|unlicen[cs]es?|copying|copyright"
+                         r"|notices?|ofl|eula|patents|disclaimers?",
                          re.IGNORECASE)
 # A license identifier. CC's by, sa and nd modify cc; they never name a
-# license on their own, so they are modifiers, not identifiers.
-LEGAL_ID = re.compile(r"cc0?|mit|apache|bsd|isc|epl|mpl|gpl|lgpl|agpl|bsl|zlib"
-                      r"|wtfpl|artistic|lesser|library", re.IGNORECASE)
+# license on their own, so they are modifiers, not identifiers. lesser and
+# library only qualify another identifier (COPYING.LESSER).
+LEGAL_ID_WORDS = (r"cc0?|mit|apache|bsd|isc|epl|mpl|gpl|lgpl|agpl|bsl|zlib"
+                  r"|wtfpl|artistic|eupl|osl|cecill|ncsa")
+LEGAL_ID = re.compile("%s|lesser|library" % LEGAL_ID_WORDS, re.IGNORECASE)
+# A document extension. Accepted after a legal token and as the extension of
+# a legal name.
+DOC_EXT = re.compile(r"txt|md|markdown|rst|html|text", re.IGNORECASE)
 # Versions, document extensions, and the words that modify an identifier
-# (the rest of an SPDX expression: BSD-3-Clause, GPL-3.0-or-later).
-LEGAL_MODIFIER = re.compile(r"v?\d[\w.]*|txt|md|markdown|rst|html|text|by|sa|nd"
+# (the rest of an SPDX expression: BSD-3-Clause, GPL-3.0-or-later, plus the
+# letter suffix on CeCILL-B).
+LEGAL_MODIFIER = re.compile(r"v?\d[\w.]*|%s|by|sa|nd"
                             r"|sampling|or|later|only|no|generic|with|clause"
-                            r"|exception|classpath", re.IGNORECASE)
+                            r"|exception|classpath|[a-z]" % DOC_EXT.pattern,
+                            re.IGNORECASE)
 # Anything that may follow a legal token, or sit in a bare identifier name.
 LEGAL_QUALIFIER = re.compile("(?:%s)|(?:%s)"
                              % (LEGAL_ID.pattern, LEGAL_MODIFIER.pattern),
                              re.IGNORECASE)
-# Identifiers strong enough to be a whole name by themselves. The short ones
-# are ordinary words until something identifies them: MIT.txt is a license,
-# gpl.md is a document about one.
-LEGAL_ID_ALONE = re.compile(r"mit|apache|bsd|isc|unlicense|ofl|wtfpl|zlib|artistic",
-                            re.IGNORECASE)
-# Words break on the usual separators, on a camel-case hump, and before a glued
-# version, so COPYINGv3 reads as COPYING plus v3.
-WORD_BREAK = re.compile(r"[.\-_]|(?<=[a-z0-9])(?=[A-Z])"
+# Every identifier names a bare license file by itself (MIT.txt, GPL.txt,
+# CeCILL-B.txt). The only identifiers that stay out are the two that merely
+# modify another name: a bare library.md names nothing. This is one table
+# with LEGAL_ID, not a second hand-maintained list.
+LEGAL_ID_ALONE = re.compile(LEGAL_ID_WORDS, re.IGNORECASE)
+# Words break on the usual separators, on a camel-case hump (a capital that
+# starts a new word, so ThirdPartyNotices splits and CeCILL stays whole), and
+# before a glued version, so COPYINGv3 reads as COPYING plus v3.
+WORD_BREAK = re.compile(r"[.\-_]|(?<=[a-z0-9])(?=[A-Z][a-z])"
                         r"|(?<![vV])(?<=[A-Za-z])(?=[vV]?[0-9])")
 
 FISH_REPO = "https://github.com/ram02z/tree-sitter-fish"
@@ -209,15 +224,15 @@ def language_of(path, first_line):
 def is_legal_text_name(path):
     """True when path's basename names a verbatim legal document.
 
-    A legal token has to end the name, or be followed only by versions,
-    document extensions, and license identifiers or the words that qualify
-    them. Words before the token are unrestricted; an ordinary word after it
-    is not. A bare name counts when it carries an identifier: one strong
-    identifier alone (MIT.txt), or a weak one with company (GPL-3.0.txt,
-    CC-BY-4.0.txt). A name of nothing but qualifiers is not a license:
-    or-later.txt, by-sa.txt.
+    The boundary, the reasoning, and the document-shape rule for the
+    extension are all in the comment on LEGAL_TOKEN. This function is the
+    mechanics of that one definition.
     """
-    stem = os.path.splitext(os.path.basename(path))[0]
+    base = os.path.basename(path)
+    stem, ext = os.path.splitext(base)
+    ext = ext[1:]
+    if ext and not DOC_EXT.fullmatch(ext) and not LEGAL_QUALIFIER.fullmatch(ext):
+        return False
     words = [w for w in WORD_BREAK.split(stem) if w]
     if not words:
         return False

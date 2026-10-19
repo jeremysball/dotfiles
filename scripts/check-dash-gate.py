@@ -112,6 +112,22 @@ LICENSE_CASES = [
      "Redistributions of source code " + DD + " retain this notice"),
     ("pass", "unambiguous identifier alone", "MIT.txt",
      "Permission is hereby granted " + DD + " free of charge"),
+    ("pass", "bare family identifier alone", "LGPL.txt",
+     "GNU Lesser General Public License " + DD + " version 2.1"),
+    ("pass", "bare gpl name", "gpl.md",
+     "GNU General Public License " + DD + " version 3"),
+    ("pass", "letter suffix identifier", "CeCILL-B.txt",
+     "contrat de licence " + DD + " libre"),
+    ("pass", "eupl identifier with a version", "EUPL-1.2.txt",
+     "European Union Public Licence " + DD + " v1.2"),
+    ("pass", "unlicence spelling of the unlicense stem", "UNLICENCE",
+     "this is free and unencumbered " + DD + " released"),
+    ("pass", "eula stem", "EULA.txt",
+     "End " + DD + " User License Agreement"),
+    ("pass", "patents stem", "PATENTS",
+     "patent " + DD + " grant"),
+    ("block", "unknown extension on a legal stem is checked", "COPYING.pl",
+     "prose " + DD + " text " + DD + " here"),
     ("pass", "identifier with a version", "Apache-2.0.md",
      "Licensed under the Apache License " + DD + " Version 2.0"),
     ("block", "two modifier words are not a license name", "or-later.txt",
@@ -128,7 +144,7 @@ LICENSE_CASES = [
      'print("x")  # a ' + DD + " b"),
     ("block", "authored check under a license name", "license-check.sh",
      "true  # a " + EM + " b"),
-    ("block", "one weak identifier word is not a legal name", "gpl.md",
+    ("block", "one modifying word is not a legal name", "library.md",
      "prose " + DD + " text " + DD + " here"),
     ("block", "same shape in authored prose", "f.txt",
      "or substituting " + DD + " in part " + DD + " whole"),
@@ -195,7 +211,7 @@ def stage_and_run(line, locale, name="f.txt"):
         shutil.rmtree(work, ignore_errors=True)
 
 
-def verdict(code):
+def outcome(code):
     """0 is a pass, 1 is an enforced block. Any other exit means the gate
     could not run (it exits 2 on that) and must satisfy neither expectation."""
     if code == 0:
@@ -226,8 +242,9 @@ def check_fix_hint():
     try:
         blocked = subprocess.run(["bash", HOOK], cwd=work, env=env,
                                  capture_output=True, text=True)
-        if blocked.returncode == 0:
-            return "hook did not block the offending lines"
+        got = outcome(blocked.returncode)
+        if got != "block":
+            return "hook did not block the offending lines (got %s)" % got
         printed = blocked.stdout.splitlines() + blocked.stderr.splitlines()
         hint = next((ln.strip() for ln in printed
                      if "sed -E" in ln), None)
@@ -242,8 +259,9 @@ def check_fix_hint():
         subprocess.run(["git", "-C", work, "add", "f.txt"], env=env, check=True)
         again = subprocess.run(["bash", HOOK], cwd=work, env=env,
                                capture_output=True, text=True)
-        if again.returncode != 0:
-            return "gate still blocks after running its own hint"
+        got = outcome(again.returncode)
+        if got != "pass":
+            return "gate still blocks after running its own hint (got %s)" % got
         return None
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -268,8 +286,9 @@ def check_gitlink():
                         "--cacheinfo", "160000,%s,sub" % sha], env=env, check=True)
         done = subprocess.run(["bash", HOOK], cwd=work, env=env,
                               capture_output=True, text=True)
-        if done.returncode != 0:
-            return "staged gitlink blocked: %s" % done.stderr.strip()[:200]
+        got = outcome(done.returncode)
+        if got != "pass":
+            return "staged gitlink %s: %s" % (got, done.stderr.strip()[:200])
         return None
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -300,8 +319,9 @@ def check_textconv():
                         "secret.gpg", "tool.sh"], env=env, check=True)
         done = subprocess.run(["bash", HOOK], cwd=work, env=env,
                               capture_output=True, text=True)
-        if done.returncode != 0:
-            return "staged textconv file blocked: %s" % done.stderr.strip()[:200]
+        got = outcome(done.returncode)
+        if got != "pass":
+            return "staged textconv file %s: %s" % (got, done.stderr.strip()[:200])
         return None
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -315,25 +335,25 @@ def main():
     for locale in LOCALES:
         print("locale %s" % locale)
         for want, name, line in CASES:
-            got = verdict(stage_and_run(line, locale))
+            got = outcome(stage_and_run(line, locale))
             ok = got == want
             failures += not ok
             print("  %-4s got=%-5s want=%-5s %s"
                   % ("ok" if ok else "FAIL", got, want, name))
-    print("code files")
-    for want, name, filename, content in CODE_CASES:
-        got = verdict(stage_and_run(content, "en_US.UTF-8", filename))
-        ok = got == want
-        failures += not ok
-        print("  %-4s got=%-5s want=%-5s %s"
-              % ("ok" if ok else "FAIL", got, want, name))
-    print("verbatim legal names")
-    for want, name, filename, content in LICENSE_CASES:
-        got = verdict(stage_and_run(content, "en_US.UTF-8", filename))
-        ok = got == want
-        failures += not ok
-        print("  %-4s got=%-5s want=%-5s %s"
-              % ("ok" if ok else "FAIL", got, want, name))
+        print("code files (%s)" % locale)
+        for want, name, filename, content in CODE_CASES:
+            got = outcome(stage_and_run(content, locale, filename))
+            ok = got == want
+            failures += not ok
+            print("  %-4s got=%-5s want=%-5s %s"
+                  % ("ok" if ok else "FAIL", got, want, name))
+        print("verbatim legal names (%s)" % locale)
+        for want, name, filename, content in LICENSE_CASES:
+            got = outcome(stage_and_run(content, locale, filename))
+            ok = got == want
+            failures += not ok
+            print("  %-4s got=%-5s want=%-5s %s"
+                  % ("ok" if ok else "FAIL", got, want, name))
     for name, check in (("printed fix hint", check_fix_hint),
                         ("staged gitlink", check_gitlink),
                         ("textconv not run", check_textconv)):
@@ -344,11 +364,11 @@ def main():
     if failures:
         print("\ncheck-dash-gate: %d mismatch(es)" % failures, file=sys.stderr)
         return 1
-    print("\ncheck-dash-gate: %d cases pass in %d locales, %d code-file cases, "
-          "%d legal-name cases, plus the fix hint, staged-gitlink, and textconv "
-          "cases. Knob inertness and bypass advertisements across all three hooks "
-          "live in scripts/check-hook-knobs.py."
-          % (len(CASES), len(LOCALES), len(CODE_CASES), len(LICENSE_CASES)))
+    print("\ncheck-dash-gate: %d prose, %d code-file, and %d legal-name cases "
+          "pass in %d locales each, plus the fix hint, staged-gitlink, and "
+          "textconv cases. Knob inertness and bypass advertisements across all "
+          "three hooks live in scripts/check-hook-knobs.py."
+          % (len(CASES), len(CODE_CASES), len(LICENSE_CASES), len(LOCALES)))
     return 0
 
 
