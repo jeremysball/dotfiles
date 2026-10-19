@@ -123,6 +123,15 @@ herdr = "latest"
 java = "temurin-21.0.12+8.0.LTS"
 crush = "latest"
 
+# gh-axi was a bare `npm install -g` under node@latest, declared in no mise
+# config, so its shim only resolved where node@latest was the active node.
+# A repo that pins another node (taskferry pins 26.5.1) got "No version is
+# set for shim: gh-axi". The npm: backend gives it its own install dir,
+# independent of whichever node a directory selects. Pinned, not latest: an
+# unpinned CLI that wraps gh can change its output shape under every skill
+# that parses it.
+"npm:gh-axi" = "0.1.42"
+
 # Empryo installs to ~/.empryo/bin via its upstream installer (sha256-verified
 # against the signed SHA256SUMS). mise doesn't manage it: the upstream repo
 # is named SoulForge so its GitHub release assets are `soulforge-*`, and
