@@ -107,12 +107,13 @@ The SIL OFL requires its text travel with the fonts it licenses, and the
 gate's own remedy (replace it with a comma, period, or colon) would falsify
 a legal document. So the gate takes a prose file at its word when its name
 names a legal document: a legal token ends the name, or is followed only by
-versions, document extensions, and license identifiers. Words before the token
-are allowed, which is why `font-LICENSE.txt` and `ThirdPartyNotices.txt`
-qualify; an ordinary word after it is not, so `ofl-README`, `NOTICE-rules.txt`,
-and `license-notes.md` are checked like any other prose. A name of nothing but
-identifiers counts when it carries a version or more than one word, which is
-how `GPL-3.0.txt` and `CC-BY-4.0.txt` qualify while `gpl.md` does not.
+versions, document extensions, and license identifiers or the words that
+qualify them. Words before the token are allowed, which is why
+`font-LICENSE.txt` and `ThirdPartyNotices.txt` qualify; an ordinary word after
+it is not, so `ofl-README`, `NOTICE-rules.txt`, and `license-notes.md` are
+checked like any other prose. A bare name of identifiers counts too, which is
+how `GPL-3.0.txt`, `CC-BY-4.0.txt`, and `BSD-3-Clause.txt` qualify while
+`gpl.md` and `or-later.txt` do not.
 
 **When it becomes a real bug.** If an authored file gets through because its
 name is nothing but license words, that is the boundary working as written;

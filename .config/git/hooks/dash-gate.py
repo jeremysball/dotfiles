@@ -70,25 +70,33 @@ DASH_RE = re.compile(
 # authored whoever owns the repository.
 #
 # The boundary the name has to clear: a legal token ends the name, or is
-# followed only by versions, document extensions, and license identifiers.
-# Words before the token are unrestricted (font-LICENSE.txt,
-# ThirdPartyNotices.txt, LICENSES/Apache-2.0.txt); an ordinary word after it
-# is not (ofl-README, NOTICE-rules.txt, license-notes.md). A name of nothing
-# but identifiers, carrying a version or at least two words, names a license
-# too (GPL-3.0.txt, CC-BY-4.0.txt).
+# followed only by versions, document extensions, and license identifiers or
+# the words that qualify them. Words before the token are unrestricted
+# (font-LICENSE.txt, ThirdPartyNotices.txt, LICENSES/Apache-2.0.txt); an
+# ordinary word after it is not (ofl-README, NOTICE-rules.txt,
+# license-notes.md). A bare name of identifiers names a license too
+# (GPL-3.0.txt, CC-BY-4.0.txt).
 # scripts/check-dash-gate.py pins the boundary in both directions.
 LEGAL_TOKEN = re.compile(r"licen[cs]es?|unlicense|copying|copyright|notices?|ofl",
                          re.IGNORECASE)
-LEGAL_QUALIFIER = re.compile(
-    r"(?:v?\d[\w.]*|txt|md|markdown|rst|html|text|cc0?|by|sa|nd|sampling|mit|apache"
-    r"|bsd|isc|epl|mpl|gpl|lgpl|agpl|bsl|zlib|wtfpl|artistic|lesser|library|or|later"
-    r"|only|no|generic)",
-    re.IGNORECASE)
-# Identifiers that name a license standing alone. The short ones do not: cc,
-# by, sa, gpl, and the rest of that shape need a version or a second word
-# before a file called that is taken at its word.
-LEGAL_ID_ALONE = re.compile(r"mit|apache|bsd|isc|unlicense|ofl|wtfpl|zlib|artistic",
+# A license identifier. CC's by, sa and nd modify cc; they never name a
+# license on their own, so they are modifiers, not identifiers.
+LEGAL_ID = re.compile(r"cc0?|mit|apache|bsd|isc|epl|mpl|gpl|lgpl|agpl|bsl|zlib"
+                      r"|wtfpl|artistic|lesser|library", re.IGNORECASE)
+# Versions, document extensions, and the words that modify an identifier
+# (the rest of an SPDX expression: BSD-3-Clause, GPL-3.0-or-later).
+LEGAL_MODIFIER = re.compile(r"v?\d[\w.]*|txt|md|markdown|rst|html|text|by|sa|nd"
+                            r"|sampling|or|later|only|no|generic|with|clause"
+                            r"|exception|classpath", re.IGNORECASE)
+# Anything that may follow a legal token, or sit in a bare identifier name.
+LEGAL_QUALIFIER = re.compile("(?:%s)|(?:%s)"
+                             % (LEGAL_ID.pattern, LEGAL_MODIFIER.pattern),
                              re.IGNORECASE)
+# Identifiers strong enough to be a whole name by themselves. The short ones
+# are ordinary words until something identifies them: MIT.txt is a license,
+# gpl.md is a document about one.
+LEGAL_ID_ALONE = re.compile(r"mit|apache|bsd|isc|unlicense|ofl|wtfpl|zlib|artistic",
+                            re.IGNORECASE)
 # Words break on the usual separators, on a camel-case hump, and before a glued
 # version, so COPYINGv3 reads as COPYING plus v3.
 WORD_BREAK = re.compile(r"[.\-_]|(?<=[a-z0-9])(?=[A-Z])"
@@ -205,11 +213,12 @@ def is_legal_text_name(path):
     """True when path's basename names a verbatim legal document.
 
     A legal token has to end the name, or be followed only by versions,
-    document extensions, and license identifiers. Words before the token are
-    unrestricted; an ordinary word after it is not. A name of nothing but
-    identifiers counts when it carries a version or more than one word, or is
-    a single identifier that names a license on its own: MIT.txt yes, gpl.md
-    no, one weak word is not enough.
+    document extensions, and license identifiers or the words that qualify
+    them. Words before the token are unrestricted; an ordinary word after it
+    is not. A bare name counts when it carries an identifier: one strong
+    identifier alone (MIT.txt), or a weak one with company (GPL-3.0.txt,
+    CC-BY-4.0.txt). A name of nothing but qualifiers is not a license:
+    or-later.txt, by-sa.txt.
     """
     stem = os.path.splitext(os.path.basename(path))[0]
     words = [w for w in WORD_BREAK.split(stem) if w]
@@ -220,7 +229,9 @@ def is_legal_text_name(path):
             return all(LEGAL_QUALIFIER.fullmatch(w) for w in words[i + 1:])
     if not all(LEGAL_QUALIFIER.fullmatch(w) for w in words):
         return False
-    return len(words) > 1 or LEGAL_ID_ALONE.fullmatch(words[0]) is not None
+    if len(words) == 1:
+        return LEGAL_ID_ALONE.fullmatch(words[0]) is not None
+    return any(LEGAL_ID.fullmatch(w) for w in words)
 
 
 def resolve_fish_parser(flag):

@@ -75,12 +75,13 @@ CODE_CASES = [
 # Name-scoped, not content-scoped.
 #
 # The boundary the name has to clear: a legal token ends the name, or is
-# followed only by versions, document extensions, and license identifiers.
-# Anything before the token is allowed (font-LICENSE.txt, ThirdPartyNotices.txt,
-# LICENSES/Apache-2.0.txt); an ordinary word after it is not (ofl-README,
-# NOTICE-rules.txt, license-notes.md). A name made only of identifiers, with a
-# version in it or at least two words, is a license file too (GPL-3.0.txt,
-# CC-BY-4.0.txt). The block cases pin the contrast with authored prose of the
+# followed only by versions, document extensions, and license identifiers or
+# the words that qualify them. Anything before the token is allowed
+# (font-LICENSE.txt, ThirdPartyNotices.txt, LICENSES/Apache-2.0.txt); an
+# ordinary word after it is not (ofl-README, NOTICE-rules.txt,
+# license-notes.md). A bare name of identifiers is a license file too
+# (GPL-3.0.txt, CC-BY-4.0.txt), while a bare name of only qualifiers is not
+# (or-later.txt). The block cases pin the contrast with authored prose of the
 # same shape, and the code cases pin that the exemption is prose-only: a
 # comment in a legal-named code file is still checked, because a comment is
 # authored whatever the file is called.
@@ -121,8 +122,16 @@ LICENSE_CASES = [
      "Creative Commons Attribution 4.0 " + DD + " public"),
     ("pass", "spdx identifier with a qualifier", "GPL-3.0-or-later.txt",
      "either version 3 of the License " + DD + " or any later"),
+    ("pass", "spdx expression with a clause word", "BSD-3-Clause.txt",
+     "Redistributions of source code " + DD + " retain this notice"),
     ("pass", "unambiguous identifier alone", "MIT.txt",
      "Permission is hereby granted " + DD + " free of charge"),
+    ("pass", "identifier with a version", "Apache-2.0.md",
+     "Licensed under the Apache License " + DD + " Version 2.0"),
+    ("block", "two modifier words are not a license name", "or-later.txt",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "cc modifiers alone are not a license name", "by-sa.txt",
+     "prose " + DD + " text " + DD + " here"),
     ("block", "authored notes under a legal name", "license-notes.md",
      "quoted " + DD + " terms " + DD + " kept"),
     ("block", "authored readme under an ofl name", "ofl-README",
