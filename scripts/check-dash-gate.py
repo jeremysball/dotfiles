@@ -209,6 +209,15 @@ def stage_and_run(line, locale, name="f.txt"):
         shutil.rmtree(work, ignore_errors=True)
 
 
+def verdict(code):
+    """0 is a pass, 1 is an enforced block. Any other exit means the gate
+    could not run (it exits 2 on that) and must satisfy neither expectation."""
+    if code == 0:
+        return "pass"
+    if code == 1:
+        return "block"
+    return "error-%d" % code
+
 
 def scratch_repo(lines, locale):
     """Return (work_dir, env) with `lines` staged. Caller removes the dir."""
@@ -320,21 +329,21 @@ def main():
     for locale in LOCALES:
         print("locale %s" % locale)
         for want, name, line in CASES:
-            got = "block" if stage_and_run(line, locale) != 0 else "pass"
+            got = verdict(stage_and_run(line, locale))
             ok = got == want
             failures += not ok
             print("  %-4s got=%-5s want=%-5s %s"
                   % ("ok" if ok else "FAIL", got, want, name))
     print("code files")
     for want, name, filename, content in CODE_CASES:
-        got = "block" if stage_and_run(content, "en_US.UTF-8", filename) != 0 else "pass"
+        got = verdict(stage_and_run(content, "en_US.UTF-8", filename))
         ok = got == want
         failures += not ok
         print("  %-4s got=%-5s want=%-5s %s"
               % ("ok" if ok else "FAIL", got, want, name))
     print("verbatim legal names")
     for want, name, filename, content in LICENSE_CASES:
-        got = "block" if stage_and_run(content, "en_US.UTF-8", filename) != 0 else "pass"
+        got = verdict(stage_and_run(content, "en_US.UTF-8", filename))
         ok = got == want
         failures += not ok
         print("  %-4s got=%-5s want=%-5s %s"
