@@ -119,7 +119,7 @@ checked like any other prose. A bare name of identifiers counts too, which is
 how `GPL-3.0.txt`, `CC-BY-4.0.txt`, `BSD-3-Clause.txt`, `MIT.txt`, and
 `LGPL.txt` qualify while `or-later.txt` and `by-sa.txt` do not (nothing but
 the words that qualify an identifier). The extension has to be document
-shaped as well (a document extension, none at all, or a qualifier word as in
+shaped as well (a document extension, none at all, or an identifier word as in
 `COPYING.LESSER`), so `COPYING.pl` is checked like any other unknown file.
 
 **When it becomes a real bug.** If an authored file gets through because its

@@ -14,8 +14,9 @@ for a dash. What gets checked depends on the file:
       EULA, PATENTS, DISCLAIMER stems, or a bare license identifier)
       not checked, prose only: a code file is checked for comment text
       whatever it is called. The name has to be document shaped too (no
-      extension or a document extension), so an unknown extension on a legal
-      stem, COPYING.pl, is checked like any other unknown file. The boundary
+      extension, a document extension, or an identifier word as in
+      COPYING.LESSER), so an unknown extension on a legal stem, COPYING.pl,
+      is checked like any other unknown file. The boundary
       and the reasoning live in the comment on LEGAL_TOKEN.
 
 Unknown types default to strict on purpose: a file the gate cannot parse is
@@ -75,9 +76,10 @@ DASH_RE = re.compile(
 # (font-LICENSE.txt, ThirdPartyNotices.txt, LICENSES/Apache-2.0.txt); an
 # ordinary word after it is not (ofl-README, NOTICE-rules.txt,
 # license-notes.md). The extension is part of the name and has to be document
-# shaped (a document extension, empty, or itself a qualifier as in
-# COPYING.LESSER), so an unknown extension on a legal stem (COPYING.pl) is
-# ordinary prose. A bare name of identifiers names a license too
+# shaped (a document extension, empty, or an identifier word as in
+# COPYING.LESSER), so an unknown extension on a legal stem (COPYING.pl, or a
+# one letter or version shaped one like LICENSE.x and LICENSE.1) is ordinary
+# prose. A bare name of identifiers names a license too
 # (GPL-3.0.txt, CC-BY-4.0.txt, MIT.txt, CeCILL-B.txt).
 # scripts/check-dash-gate.py pins the boundary in both directions.
 LEGAL_TOKEN = re.compile(r"licen[cs]es?|unlicen[cs]es?|copying|copyright"
@@ -231,7 +233,7 @@ def is_legal_text_name(path):
     base = os.path.basename(path)
     stem, ext = os.path.splitext(base)
     ext = ext[1:]
-    if ext and not DOC_EXT.fullmatch(ext) and not LEGAL_QUALIFIER.fullmatch(ext):
+    if ext and not DOC_EXT.fullmatch(ext) and not LEGAL_ID.fullmatch(ext):
         return False
     words = [w for w in WORD_BREAK.split(stem) if w]
     if not words:
