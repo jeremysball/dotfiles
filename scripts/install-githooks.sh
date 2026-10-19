@@ -43,11 +43,12 @@ set -euo pipefail
 
 hook_name="$(basename "$0")"
 # Fail open on the lookup, the way every hook in ~/.config/git/hooks already
-# does (pre-commit:94, pre-push:190, post-checkout:17). Under `set -e` the
-# bare form aborts the shim, so a context where --show-toplevel legitimately
-# fails turns a gate into a hard block: verified 2026-09-03 by pushing from a
-# bare repo, where the bare form died `fatal: this operation must be run in a
-# work tree` and refused the push while the global pre-push exited 0.
+# does (pre-commit's primary-checkout gate, pre-push:190, post-checkout:17).
+# Under `set -e` the bare form aborts the shim, so a context where
+# --show-toplevel legitimately fails turns a gate into a hard block: verified
+# 2026-09-03 by pushing from a bare repo, where the bare form died `fatal:
+# this operation must be run in a work tree` and refused the push while the
+# global pre-push exited 0.
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 global_hook="${XDG_CONFIG_HOME:-$HOME/.config}/git/hooks/$hook_name"
 self_path="$(realpath "$0" 2>/dev/null || echo "$0")"
@@ -74,13 +75,13 @@ for candidate in "$local_hook" "$alt_hook"; do
   [ -f "$candidate" ] || continue
   candidate_real="$(realpath "$candidate" 2>/dev/null || echo "")"
   [ -n "$candidate_real" ] && [ "$candidate_real" != "$self_path" ] || continue
-  # GIT_HOOKS_CHAINED propagates down, matching pre-commit:138-144 and
-  # pre-push:198. Not a bug fix: measured 2026-09-03, a .local that is itself
-  # a shim copy already runs the global gates once either way, because
-  # re-entry changes the basename to pre-commit.local and the global lookup
-  # misses. That is the same accident the realpath check above refuses to
-  # rely on, so state the invariant instead: once the gates have run, nothing
-  # downstream runs them again.
+  # GIT_HOOKS_CHAINED propagates down, matching the exec block at the end of
+  # pre-commit and pre-push:198. Not a bug fix: measured 2026-09-03, a .local
+  # that is itself a shim copy already runs the global gates once either way,
+  # because re-entry changes the basename to pre-commit.local and the global
+  # lookup misses. That is the same accident the realpath check above refuses
+  # to rely on, so state the invariant instead: once the gates have run,
+  # nothing downstream runs them again.
   if [ -x "$candidate" ]; then
     exec env GIT_HOOKS_CHAINED=1 "$candidate" "$@"
   else
