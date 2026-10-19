@@ -84,7 +84,10 @@ literal is not checked, because telling a user-facing string from a format
 string or a test fixture needs more than a parser.
 
 A file ast-grep cannot parse (markdown, TOML, an unknown extension) is checked
-line by line, as before. Unknown means strict, never skipped.
+line by line, as before. Unknown means strict: the one exemption is by name,
+the verbatim legal text entry below, and it needs a document shape to fire. A
+legal stem with an unknown extension, like `COPYING.pl`, is checked like any
+other unknown file.
 
 **When it becomes a real bug.** If a comment with an em dash gets through, or
 if a code file is checked line by line again. `python3
@@ -93,8 +96,9 @@ scripts/check-dash-gate.py` covers both directions.
 ## The dash gate lets a license file keep its double hyphens
 
 **What you will observe.** `LICENSE.txt`, `LICENCE`, `COPYING`, `NOTICE.txt`,
-`OFL-1.1.txt`, `LICENSE-APACHE`, `UNLICENSE`, `COPYRIGHT`,
-`LICENSES/Apache-2.0.txt`, and `ThirdPartyNotices.txt` commit untouched with
+`OFL-1.1.txt`, `LICENSE-APACHE`, `UNLICENSE`, `UNLICENCE`, `COPYRIGHT`,
+`EULA.txt`, `PATENTS`, `LICENSES/Apache-2.0.txt`, and `ThirdPartyNotices.txt`
+commit untouched with
 an em dash or a spaced double hyphen in them, while the same characters in the
 file next door block the commit. Bundled Lexica Ultralegible fonts brought
 this up: the SIL OFL text that ships with them defines "Modified Version" with
@@ -112,8 +116,11 @@ qualify them. Words before the token are allowed, which is why
 `font-LICENSE.txt` and `ThirdPartyNotices.txt` qualify; an ordinary word after
 it is not, so `ofl-README`, `NOTICE-rules.txt`, and `license-notes.md` are
 checked like any other prose. A bare name of identifiers counts too, which is
-how `GPL-3.0.txt`, `CC-BY-4.0.txt`, and `BSD-3-Clause.txt` qualify while
-`gpl.md` and `or-later.txt` do not.
+how `GPL-3.0.txt`, `CC-BY-4.0.txt`, `BSD-3-Clause.txt`, `MIT.txt`, and
+`LGPL.txt` qualify while `or-later.txt` and `by-sa.txt` do not (nothing but
+the words that qualify an identifier). The extension has to be document
+shaped as well (a document extension, none at all, or a qualifier word as in
+`COPYING.LESSER`), so `COPYING.pl` is checked like any other unknown file.
 
 **When it becomes a real bug.** If an authored file gets through because its
 name is nothing but license words, that is the boundary working as written;

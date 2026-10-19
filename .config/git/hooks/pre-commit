@@ -8,7 +8,8 @@
 #
 # Six jobs, in order:
 #   1. Dash gate: block staged em/en dashes and double-hyphen stand-ins,
-#      in prose files and in code comments (dash-gate.py).
+#      in prose files and in code comments (dash-gate.py). Prose named as
+#      verbatim legal text is the one exemption.
 #      No bypass, by user directive 2026-10-11: fix the flagged line.
 #   2. Hardcoded absolute path gate: block a staged code line that hardcodes
 #      /home/..., /workspace/..., a username, or a hostname, per CLAUDE.md's
