@@ -130,6 +130,16 @@ is_off() {
   esac
 }
 
+# The same rule for the on side. git accepts True, YES, and on as readily as
+# true, yes, and on, so a literal match would leave the warn-mode knob on the
+# blocking path for a value git itself considers true.
+is_on() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    1 | true | yes | on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 require_linked="$(git config --local --get worktree.requireLinked 2>/dev/null || true)"
 commit_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 # substr($0,10) rather than $2, matching pre-push. awk's $2 stops at the
@@ -232,7 +242,7 @@ if [ "$check_declared" = 1 ]; then
       | awk -v root="$repo_root" -v home="$HOME" \
           '{ gsub(/^~/, home) } $0 == root ": trusted" { found=1 } END { exit !found }'; then
     check_warn="${GIT_COMMIT_BOUNDARY_CHECK_WARN:-$(git config --get commitBoundary.checkWarn 2>/dev/null || true)}"
-    if [ "$check_warn" = "1" ] || [ "$check_warn" = "true" ]; then
+    if is_on "$check_warn"; then
       if ! ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
              mise -C "$repo_root" run check ); then
         echo "pre-commit: check task failed (warning mode); commit continues." >&2
