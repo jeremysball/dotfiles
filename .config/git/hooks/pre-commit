@@ -190,7 +190,9 @@ fi
 # not executed, because `mise run` would trust that config on the spot. A
 # failed listing is reported as unknown, never read as "no task". GIT_DIR and
 # friends are unset for the same reason pre-push unsets them: git exports
-# them absolute in a linked worktree.
+# them absolute in a linked worktree. mise is deliberately the only runner:
+# the user chose it as this account's check executor, so a repo whose gate
+# lives in npm scripts gets the notice below rather than a guessed command.
 check_declared=0
 check_unknown=""
 if command -v mise >/dev/null 2>&1; then

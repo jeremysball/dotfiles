@@ -194,6 +194,11 @@ The index check only fires when the commit changes the skill topology, and it
 is warn-only. The notice is one line on stderr because silence is how a repo
 with no gate stays invisible.
 
+`mise run check` evaluates the working tree, not the staged index. A partly
+staged commit can therefore pass a check the index would fail, and unrelated
+worktree edits can block a clean commit. That is the task's own behavior; a
+staged-only gate would need a temporary index or worktree.
+
 **When it becomes a real bug.** If the index check blocks a commit, if the
 notice appears in a repo that does declare a check task, or if a warning names
 a repo-relative path as missing when the path exists in `~/.claude/skills`.
