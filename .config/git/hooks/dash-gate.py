@@ -12,12 +12,9 @@ for a dash. What gets checked depends on the file:
       no longer trips the gate, while the same shape in a comment still does
   verbatim legal text (LICENSE, COPYING, NOTICE, OFL, UNLICENSE, COPYRIGHT
       stems, or a bare SPDX identifier)
-      not checked. A license's punctuation belongs to its licensor, and the
-      SIL OFL requires its text travel with the fonts it licenses. The named
-      fix would rewrite a legal document, which is worse than leaving the
-      line alone, so these names are taken at their word. Prose only: a code
-      file is checked for comment text whatever it is called. See the comment
-      on LEGAL_TOKEN for the boundary and the reasoning.
+      not checked, prose only: a code file is checked for comment text
+      whatever it is called. The boundary and the reasoning live in the
+      comment on LEGAL_TOKEN.
 
 Unknown types default to strict on purpose: a file the gate cannot parse is
 treated as prose rather than waved through.

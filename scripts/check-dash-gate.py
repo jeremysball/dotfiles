@@ -67,24 +67,10 @@ CODE_CASES = [
     ("block", "markdown stays prose", "a.md", "run foo " + DD + " bar"),
 ]
 
-# Verbatim legal text is not authored prose. A license's punctuation belongs
-# to its licensor, and the SIL OFL requires its text travel with the fonts it
-# licenses, while its own wording carries the double-hyphen shape this gate
-# exists to block. Rewriting legal text is a worse outcome than not checking
-# the file, so a file whose name names a legal document is taken at its word.
-# Name-scoped, not content-scoped.
-#
-# The boundary the name has to clear: a legal token ends the name, or is
-# followed only by versions, document extensions, and license identifiers or
-# the words that qualify them. Anything before the token is allowed
-# (font-LICENSE.txt, ThirdPartyNotices.txt, LICENSES/Apache-2.0.txt); an
-# ordinary word after it is not (ofl-README, NOTICE-rules.txt,
-# license-notes.md). A bare name of identifiers is a license file too
-# (GPL-3.0.txt, CC-BY-4.0.txt), while a bare name of only qualifiers is not
-# (or-later.txt). The block cases pin the contrast with authored prose of the
-# same shape, and the code cases pin that the exemption is prose-only: a
-# comment in a legal-named code file is still checked, because a comment is
-# authored whatever the file is called.
+# Verbatim legal text is exempt by name, prose only: the boundary and the
+# reasoning live in dash-gate.py beside LEGAL_TOKEN. What the cases pin: a
+# legal name commits the upstream shape, the same shape in authored prose
+# blocks, and a comment in a legal-named code file still blocks.
 LICENSE_CASES = [
     ("pass", "license keeps the upstream shape", "LICENSE.txt",
      "or substituting " + DD + " in part " + DD + " whole"),
