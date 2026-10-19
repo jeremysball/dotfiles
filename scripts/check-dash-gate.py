@@ -71,11 +71,19 @@ CODE_CASES = [
 # to its licensor, and the SIL OFL requires its text travel with the fonts it
 # licenses, while its own wording carries the double-hyphen shape this gate
 # exists to block. Rewriting legal text is a worse outcome than not checking
-# the file, so legal-document names are taken at their word. Name-scoped, not
-# content-scoped: the stem must end the name or be followed by a dot or a
-# hyphen, so LICENSE.txt, LICENSE-APACHE, OFL-1.1.txt and COPYING match while
-# noticeable.md does not. The block cases pin the contrast with authored
-# prose of the same shape.
+# the file, so a file whose name names a legal document is taken at its word.
+# Name-scoped, not content-scoped.
+#
+# The boundary the name has to clear: a legal token ends the name, or is
+# followed only by versions, document extensions, and license identifiers.
+# Anything before the token is allowed (font-LICENSE.txt, ThirdPartyNotices.txt,
+# LICENSES/Apache-2.0.txt); an ordinary word after it is not (ofl-README,
+# NOTICE-rules.txt, license-notes.md). A name made only of identifiers, with a
+# version in it or at least two words, is a license file too (GPL-3.0.txt,
+# CC-BY-4.0.txt). The block cases pin the contrast with authored prose of the
+# same shape, and the code cases pin that the exemption is prose-only: a
+# comment in a legal-named code file is still checked, because a comment is
+# authored whatever the file is called.
 LICENSE_CASES = [
     ("pass", "license keeps the upstream shape", "LICENSE.txt",
      "or substituting " + DD + " in part " + DD + " whole"),
@@ -91,12 +99,52 @@ LICENSE_CASES = [
      "punctuation " + DD + " kept " + DD + " verbatim"),
     ("pass", "inside a vendor tree", "vendor/foo/LICENSE.md",
      "upstream " + DD + " wording " + DD + " kept"),
-    ("pass", "draft under a legal name is taken at its word", "license-notes.md",
+    ("pass", "unlicense stem", "UNLICENSE",
+     "this is free and unencumbered " + DD + " released"),
+    ("pass", "copyright stem", "COPYRIGHT",
+     "all rights reserved " + DD + " per year"),
+    ("pass", "plural stem under a licences directory", "LICENSES/Apache-2.0.txt",
+     "Licensed under the Apache License " + DD + " Version 2.0"),
+    ("pass", "identifier before the stem", "MIT-LICENSE.txt",
+     "Permission is hereby granted " + DD + " free of charge"),
+    ("pass", "identifier after the stem, underscore", "LICENSE_APACHE",
+     "Licensed under the Apache License " + DD + " Version 2.0"),
+    ("pass", "underscore separator", "OFL_1.1.txt",
+     "the Font Software " + DD + " modified " + DD + " version"),
+    ("pass", "gnu lesser name", "COPYING.LESSER",
+     "Additional permissions under the GNU Lesser " + EM + " License"),
+    ("pass", "gnu version glued to the stem", "COPYINGv3",
+     "under the terms of version 3 " + DD + " or later"),
+    ("pass", "camel case notices bundle", "ThirdPartyNotices.txt",
+     "This product includes software developed by " + DD + " others"),
+    ("pass", "spdx identifier name", "CC-BY-4.0.txt",
+     "Creative Commons Attribution 4.0 " + DD + " public"),
+    ("pass", "spdx identifier with a qualifier", "GPL-3.0-or-later.txt",
+     "either version 3 of the License " + DD + " or any later"),
+    ("pass", "unambiguous identifier alone", "MIT.txt",
+     "Permission is hereby granted " + DD + " free of charge"),
+    ("block", "authored notes under a legal name", "license-notes.md",
      "quoted " + DD + " terms " + DD + " kept"),
+    ("block", "authored readme under an ofl name", "ofl-README",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "authored rules under a notice name", "NOTICE-rules.txt",
+     "prose " + DD + " text " + DD + " here"),
+    ("block", "authored generator under a notice name", "notice-generator.py",
+     'print("x")  # a ' + DD + " b"),
+    ("block", "authored check under a license name", "license-check.sh",
+     "true  # a " + EM + " b"),
+    ("block", "one weak identifier word is not a legal name", "gpl.md",
+     "prose " + DD + " text " + DD + " here"),
     ("block", "same shape in authored prose", "f.txt",
      "or substituting " + DD + " in part " + DD + " whole"),
     ("block", "stem glued to a word is not a legal name", "noticeable.md",
      "prose " + DD + " text " + DD + " here"),
+    ("block", "comment in a legal-named code file", "license.py",
+     "x = 1  # a" + DD + "b"),
+    ("block", "comment in a legal-named shell file", "ofl.sh",
+     "true  # a " + EM + " b"),
+    ("pass", "code in a legal-named file is not a comment", "notice.py",
+     'x = "a ' + DD + ' b"'),
 ]
 
 

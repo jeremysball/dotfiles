@@ -41,10 +41,11 @@ DEFAULT_REQUIRE_LINKED=true
 # and the file handling live in dash-gate.py next to this hook: prose files are
 # checked line by line, code files only in their comments (ast-grep decides
 # what a comment is), so a shell end-of-options double hyphen is not a dash.
-# Files named like verbatim legal text (LICENSE, COPYING, NOTICE, OFL) are
-# exempt by name: a license's punctuation belongs to its licensor and must
-# ship as written. The boundary is in dash-gate.py, pinned by
-# scripts/check-dash-gate.py.
+# Prose files named like verbatim legal text (LICENSE, COPYING, NOTICE, OFL,
+# UNLICENSE, COPYRIGHT, or a bare SPDX identifier) are exempt by name: a
+# license's punctuation belongs to its licensor and must ship as written. A
+# code file is checked in its comments whatever it is called. The boundary is
+# in dash-gate.py, pinned by scripts/check-dash-gate.py.
 # Resolve through the symlink: [dotfiles] links this hook into
 # ~/.config/git/hooks, and dash-gate.py sits beside the real file.
 # The SKIP_DASH_CHECK family of env hatches was removed 2026-10-11 by user

@@ -93,25 +93,33 @@ scripts/check-dash-gate.py` covers both directions.
 ## The dash gate lets a license file keep its double hyphens
 
 **What you will observe.** `LICENSE.txt`, `LICENCE`, `COPYING`, `NOTICE.txt`,
-`OFL-1.1.txt`, and `LICENSE-APACHE` commit untouched with an em dash or a
-spaced double hyphen in them, while the same characters in the file next
-door block the commit. Bundled Lexica Ultralegible fonts brought this up:
-the SIL OFL text that ships with them defines "Modified Version" with the
-exact shape the gate exists to block.
+`OFL-1.1.txt`, `LICENSE-APACHE`, `UNLICENSE`, `COPYRIGHT`,
+`LICENSES/Apache-2.0.txt`, and `ThirdPartyNotices.txt` commit untouched with
+an em dash or a spaced double hyphen in them, while the same characters in the
+file next door block the commit. Bundled Lexica Ultralegible fonts brought
+this up: the SIL OFL text that ships with them defines "Modified Version" with
+the exact shape the gate exists to block. A code file is the exception: a
+comment in `license.py` or `notice.sh` still blocks, because a comment is
+authored whoever owns the repository.
 
 **Why it is deliberate.** A license's punctuation belongs to its licensor.
 The SIL OFL requires its text travel with the fonts it licenses, and the
 gate's own remedy (replace it with a comma, period, or colon) would falsify
-a legal document. So the gate takes legal-document names at their word: the
-stem `licen[cs]e`, `copying`, `notice`, or `ofl` must end the filename or be
-followed by a dot or a hyphen. Name-scoped, not content-scoped: the same
-characters in authored prose still block.
+a legal document. So the gate takes a prose file at its word when its name
+names a legal document: a legal token ends the name, or is followed only by
+versions, document extensions, and license identifiers. Words before the token
+are allowed, which is why `font-LICENSE.txt` and `ThirdPartyNotices.txt`
+qualify; an ordinary word after it is not, so `ofl-README`, `NOTICE-rules.txt`,
+and `license-notes.md` are checked like any other prose. A name of nothing but
+identifiers counts when it carries a version or more than one word, which is
+how `GPL-3.0.txt` and `CC-BY-4.0.txt` qualify while `gpl.md` does not.
 
-**When it becomes a real bug.** If authored prose gets parked under a legal
-name to reach the exemption, that file is taken at its word, because the
-filename is the only signal. If the names ever widen past legal documents,
-or a dash in authored prose commits because of it, it is a bug. `python3
-scripts/check-dash-gate.py` pins both directions.
+**When it becomes a real bug.** If an authored file gets through because its
+name is nothing but license words, that is the boundary working as written;
+renaming it to `MIT-notes.md` brings it back under the gate. If an ordinary
+word ever counts as a qualifier, so `ofl-README` or `license-notes.md` commits
+a dash, or if a comment in a legal-named code file stops being checked, it is a
+bug. `python3 scripts/check-dash-gate.py` pins both directions.
 
 ## The first commit of a fish file pauses to compile something
 
