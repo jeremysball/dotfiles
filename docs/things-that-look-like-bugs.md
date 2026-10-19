@@ -218,3 +218,34 @@ outside */shell-snapshots/*, or if Claude Code stops sourcing the snapshot via
 `source` (then activation would run before the snapshot again and the frozen
 PATH would silently win; the symptom is `node -v` reporting the global version
 inside a project pin).
+
+## Every dispatch route is capped at 200k even though the provider serves 1M
+
+**What a reader will observe.** `.config/opencode/opencode.json`,
+`.config/opencode/opencode.jsonc` and `.config/kilo/kilo.jsonc` give every
+route a `limit.context` of 200000, or the route's own native window when that
+is smaller (128000 for `gpt-4o`, for example). The gateway's catalog reports a
+native window of up to 1,050,000 tokens for the same models, and
+`gpt-6.1-sol` in particular was capped at 500k until 2026-10-19.
+
+**Why it is deliberate.** The 200k cap is the fleet's budget, not the
+provider's window. A configured `limit.context` is what makes the harness
+compact: an uncapped route inherits the catalog window, so a session on it
+grows past 200k without ever triggering compaction. That is exactly what the
+2026-10-18 burn did, reaching 661,706 tokens per step with zero compaction
+events. The harness merges the provider catalog over the config at runtime, so
+a route nobody declared is still dispatchable, just uncapped.
+
+The cap covers all 144 routes the gateway serves, declared identically in all
+three fleet configs. Routes on providers the fleet does not dispatch on keep
+their own windows, and the check reports them rather than clamping them: the
+decision-model paths that use those routes chose those windows. Where two
+copies of one route disagreed, the lower number wins, so a route cannot be
+capped in one file and uncapped in the next.
+
+**When it becomes a real bug.** If the fleet's real budget grows past 200k,
+the cap and `scripts/check-fleet-context-cap.py` have to move together. The
+check fails when a route has no limit, when one exceeds the cap, when the
+three configs declare different route sets, and when the summarizer's window
+is smaller than the point where compaction fires. It exits 2, not 0, when the
+gateway catalog cannot be read: a check that could not look has not passed.

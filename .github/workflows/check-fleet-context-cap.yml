@@ -1,0 +1,43 @@
+name: check-fleet-context-cap
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/check-fleet-context-cap.py'
+      - '.github/workflows/check-fleet-context-cap.yml'
+      - '.config/opencode/**'
+      - '.config/kilo/**'
+      - '.mise.toml'
+  pull_request:
+    paths:
+      - 'scripts/check-fleet-context-cap.py'
+      - '.github/workflows/check-fleet-context-cap.yml'
+      - '.config/opencode/**'
+      - '.config/kilo/**'
+      - '.mise.toml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+      MISE_IGNORED_CONFIG_PATHS: ${{ github.workspace }}/.config/mise/config.toml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+      - name: Check every dispatch route is capped at 200k
+        env:
+          LLM_GATEWAY_API_KEY: ${{ secrets.LLM_GATEWAY_API_KEY }}
+        run: |
+          if [ -n "$LLM_GATEWAY_API_KEY" ]; then
+            # Live catalog: also catches a route the gateway starts serving
+            # that no fleet config declares, and a route it stops serving.
+            mise run check-fleet-context-cap
+          else
+            echo "no LLM_GATEWAY_API_KEY secret: checking the configured routes only"
+            mise run check-fleet-context-cap -- --offline
+          fi
