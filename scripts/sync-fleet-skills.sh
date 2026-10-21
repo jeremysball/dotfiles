@@ -55,9 +55,9 @@
 #
 # Note on taskferry: ~/.claude is on taskferry's sandbox deny-list
 # (src/sandbox.js defaultDenyList), masked with a tmpfs. A ferried worker
-# therefore sees none of this, symlink or not, because a symlink resolves
-# against the sandbox namespace. That is deliberate and unchanged by this
-# script; binding it back is a per-dispatch --ro-bind decision, not a default.
+# sees none of this, symlink or not, because a symlink resolves against the
+# sandbox namespace. Only the paths in .config/taskferry/config.json roBind
+# are bound back; fleet-skills is not one of them.
 
 set -euo pipefail
 
