@@ -5,6 +5,7 @@
   "noOutputTimeoutMs": 900000,
   "postOutputNoOutputTimeoutMs": 900000,
   "envFile": "/run/user/1000/secrets/global.env",
+  "roBind": "/home/jeremy/.claude/CLAUDE_md-addendum-for-non-claude-model.md,/home/jeremy/.claude/model-addenda,/home/jeremy/.claude/skills/searching-the-web,/home/jeremy/.claude/skills/using-chhoto",
   "profilingEnabled": true,
   "restartWaitForIdle": true,
   "providerLimits": {

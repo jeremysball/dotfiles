@@ -272,3 +272,40 @@ check fails when a route has no limit, when one exceeds the cap, when the
 three configs declare different route sets, and when the summarizer's window
 is smaller than the point where compaction fires. It exits 2, not 0, when the
 gateway catalog cannot be read: a check that could not look has not passed.
+
+## Every sandboxed taskferry dispatch warns that --ro-bind overrides the deny-list
+
+**What a reader will observe.** The taskferry daemon's stderr prints
+`warning: --ro-bind overrides the sandbox deny-list for: ...` with the four
+`roBind` paths from `.config/taskferry/config.json` on every sandboxed launch,
+dispatches and summaries alike. Those paths are written as absolute
+`/home/jeremy/...` while `.config/kilo/kilo.jsonc` writes `~/`. Editing the
+line changes nothing for the running daemon. A path that no longer exists is
+skipped with `warning: --ro-bind not found on this host, skipped: ...`, and
+the task still settles done.
+
+**Why it is deliberate.** `~/.claude` is on taskferry's default deny-list, so a
+worker sees an empty tmpfs there, and the global instructions it receives name
+an addendum it cannot open. `roBind` is the config key that reopens a path;
+`sandboxDenylist` only adds masks. The four entries are the addendum file,
+`model-addenda/`, and the two skills the addendum names (`searching-the-web`,
+`using-chhoto`). The warning fires because every entry sits under a
+deny-listed directory, which is the case it exists to flag, and taskferry has
+no per-entry acknowledgement. The prefix is absolute because `roBind` splits
+and trims the string and does not expand `~`: a dispatch with a `~` entry
+skipped it as missing. The daemon reads the key once at startup
+(`docs/config.md`, "No hot-reload" in the taskferry repo), so a merge needs a
+daemon restart before workers see it. A missing path is a skip rather than an
+error, unlike `envFile`, which fails at load.
+
+Kilo lists the addendum under `instructions` because it has no session hook
+(c407e35). opencode workers reach the addendum through the global
+`CLAUDE.md` that taskferry binds from `~/.config/opencode/AGENTS.md`, a link
+this repo does not track, so `.config/opencode/opencode.jsonc` has no
+`instructions` entry.
+
+**When it becomes a real bug.** If a worker cannot read the addendum while the
+four paths exist (the daemon was not restarted after an edit, or an entry no
+longer resolves), if the warning names a path outside `~/.claude` such as
+`~/.ssh`, which would be an accidental exposure, or if taskferry gains `~`
+expansion or a startup check and this entry still says otherwise.
