@@ -1,0 +1,33 @@
+name: check-mcp-parity
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/check-mcp-parity.py'
+      - '.github/workflows/check-mcp-parity.yml'
+      - '.config/opencode/**'
+      - '.config/kilo/**'
+      - '.mise.toml'
+  pull_request:
+    paths:
+      - 'scripts/check-mcp-parity.py'
+      - '.github/workflows/check-mcp-parity.yml'
+      - '.config/opencode/**'
+      - '.config/kilo/**'
+      - '.mise.toml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+      MISE_IGNORED_CONFIG_PATHS: ${{ github.workspace }}/.config/mise/config.toml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+      - name: Check kilo and opencode declare the same MCP servers
+        run: mise run check-mcp-parity

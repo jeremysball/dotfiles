@@ -18,7 +18,7 @@ mise -C ~/.dotfiles/mise-en-system run install-chromium   # fish: mise-sys insta
   "mcpServers": {
     "playwright-mcp": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--config", "${HOME}/.config/playwright-mcp/config.json"]
+      "args": ["-y", "@playwright/mcp@0.0.83", "--config", "${HOME}/.config/playwright-mcp/config.json"]
     }
   }
 }
