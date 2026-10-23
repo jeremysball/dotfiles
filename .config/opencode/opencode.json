@@ -718,44 +718,5 @@
         }
 }
     }
-  },
-  "mcp": {
-    "playwright": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "@playwright/mcp@0.0.83",
-        "--config",
-        "{env:HOME}/.config/playwright-mcp/config.json"
-      ],
-      "enabled": true
-    },
-    "chrome-devtools": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "chrome-devtools-mcp@1.11.0",
-        "--browserUrl",
-        "http://127.0.0.1:9222",
-        "--no-usage-statistics",
-        "--no-performance-crux",
-        "--redact-network-headers"
-      ],
-      "enabled": true
-    },
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "enabled": true
-    },
-    "taskferry": {
-      "type": "local",
-      "command": [
-        "taskferry"
-      ],
-      "enabled": false
-    }
   }
 }
