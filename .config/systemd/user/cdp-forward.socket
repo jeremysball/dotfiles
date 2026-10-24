@@ -1,0 +1,15 @@
+[Unit]
+Description=Local end of the Chrome DevTools Protocol forward to the Vivaldi on sisyphus
+
+# Listens on 127.0.0.1:9222 so tools that default to a local debug browser
+# (chrome-devtools-mcp --browserUrl http://127.0.0.1:9222, playwright) work
+# unchanged. Enable it on every machine EXCEPT the one that runs Vivaldi: with
+# WSL mirrored networking the browser and WSL share that loopback, so the bind
+# would collide with it. To move the port, drop in a `[Socket]` override that
+# clears ListenStream= and sets a new one, and set CDP_FORWARD_TARGET to match.
+
+[Socket]
+ListenStream=127.0.0.1:9222
+
+[Install]
+WantedBy=sockets.target
