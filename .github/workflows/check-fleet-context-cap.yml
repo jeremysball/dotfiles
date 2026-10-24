@@ -32,6 +32,7 @@ jobs:
       - name: Check every dispatch route is capped at the fleet default, with declared exceptions
         env:
           LLM_GATEWAY_API_KEY: ${{ secrets.LLM_GATEWAY_API_KEY }}
+          HYPER_API_KEY: ${{ secrets.HYPER_API_KEY }}
         run: |
           if [ -n "$LLM_GATEWAY_API_KEY" ]; then
             # Live catalog: also catches a route the gateway starts serving
