@@ -636,9 +636,12 @@
       // Hyper is a models.dev built-in in both forks, so native metadata
       // merges on top of these entries. Context is capped to the 200k
       // fleet cap for compaction parity (native window in the trailing
-      // comment); output stays at each model's native value. Prices are
+      // comment); output stays at each model's native value. DeepSeek V4.1
+      // Flash 1017 carries the same 220k carveout as llmgateway's route of
+      // the same id (2026-10-24 directive). Prices are
       // USD per Mtok in/out from GET https://hyper.charm.land/v1/models
-      // as of 2026-10-18.
+      // as of 2026-10-18. scripts/check-fleet-context-cap.py enforces this
+      // block like llmgateway's.
       //
       // REQUEST-ONLY like the other pay-per-request aggregators (nanogpt,
       // llmgateway): never a default, never an ambient fallback. Dispatch
@@ -655,11 +658,12 @@
         "deepseek-v4-flash-0731": { "name": "DeepSeek V4 Flash 0731", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 384000 } }, // native ctx 1000000, $0.44/1.32
         "deepseek-v4-pro-0813": { "name": "DeepSeek V4 Pro 0813", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 262144 } }, // native ctx 1000000, $1.437216/4.311648
         "deepseek-v4.1-flash": { "name": "DeepSeek V4.1 Flash", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 262144 } }, // native ctx 1048576, $0.33/1.31
+        "deepseek-v4.1-flash-1017": { "name": "DeepSeek V4.1 Flash 1017", "reasoning": true, "tool_call": true, "limit": { "context": 220000, "output": 262144 } }, // native ctx 1048576, $0.33/1.31; 2026-10-24 directive: same carveout as llmgateway's 1017
         "gemma-4-26b-a4b-it": { "name": "Gemma 4 26B A4B", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 25600 } }, // native ctx 256000, $0.098/0.334
         "glm-5.2": { "name": "GLM-5.2", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 32768 } }, // native ctx 1000000, $1.52432/4.79072
         "glm-5.3": { "name": "GLM 5.3", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 128000 } }, // native ctx 1000000, $1.52432/4.79072
         "glm-5.3-flash": { "name": "GLM 5.3 Flash", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 131072 } }, // native ctx 1048576, $0.16332/0.5444
-        "gpt-oss-120b": { "name": "gpt-oss-120b", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 13107 } }, // native ctx 131072, $0.178/0.68
+        "gpt-oss-120b": { "name": "gpt-oss-120b", "reasoning": true, "tool_call": true, "limit": { "context": 131072, "output": 13107 } }, // native ctx 131072, $0.178/0.68
         "inkling": { "name": "Inkling", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 65536 } }, // native ctx 1048576, $1.0888/4.40964
         "kimi-k2-thinking": { "name": "Kimi K2 Thinking", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 26214 } }, // native ctx 262144, $0.6/2.5
         "kimi-k2.7-code": { "name": "Kimi K2.7 Code", "reasoning": true, "tool_call": true, "limit": { "context": 200000, "output": 16000 } }, // native ctx 256000, $1.03436/4.3552

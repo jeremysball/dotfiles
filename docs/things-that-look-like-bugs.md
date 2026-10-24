@@ -247,9 +247,10 @@ a repo-relative path as missing when the path exists in `~/.claude/skills`.
 **What a reader will observe.** `.config/opencode/opencode.json`,
 `.config/opencode/opencode.jsonc` and `.config/kilo/kilo.jsonc` give every
 route a `limit.context` of 200000, or the route's own native window when that
-is smaller (128000 for `gpt-4o`, for example). DeepSeek V4.1 Flash 1017 is the
-one exception at 220000. The two active compaction blocks use 45000, so 1017
-triggers at 175000 and every 200k route triggers at 155000. The gateway's
+is smaller (128000 for `gpt-4o`, for example). DeepSeek V4.1 Flash 1017 on
+LLM Gateway and DeepSeek V4.1 Flash 1017 on Charm Hyper are the exceptions at
+220000. The two active compaction blocks use 45000, so those two routes
+trigger at 175000 and every 200k route triggers at 155000. The gateway's
 catalog reports a native window of up to 1,050,000 tokens for the same models,
 and `gpt-6.1-sol` in particular was capped at 500k until 2026-10-19.
 
@@ -261,34 +262,41 @@ grows past 200k without ever triggering compaction. That is exactly what the
 events. The harness merges the provider catalog over the config at runtime, so
 a route nobody declared is still dispatchable, just uncapped.
 
-The 1017 exception is a 2026-10-24 user directive: the larger context and
-buffer preserve the old 175k trigger with 20k more headroom for the summary
-call. The buffer is global to the two active compaction configs, so every 200k
-dispatch route there compacts earlier; that is the deliberate cost of keeping
-one route at the old trigger. The pi harness has its own compaction settings
-and is outside this check.
+The DeepSeek exceptions are a 2026-10-24 user directive: the larger context
+and buffer preserve the old 175k trigger with 20k more headroom for the
+summary call. Charm Hyper's DeepSeek V4.1 Flash 1017 gets the same carveout as
+LLM Gateway's route of the same id, and the check enforces Hyper's block like
+the gateway's. The buffer is global to the two active compaction configs, so every
+200k dispatch route there compacts earlier; that is the deliberate cost of
+keeping two routes at the old trigger. The pi harness has its own compaction
+settings and is outside this check.
 
-The fleet configs declare the same 141 route ids. Context caps match except
-for the 1017 override; four routes (`gpt-6.1-sol`, `gpt-6-luna`,
+The fleet configs declare the same 141 gateway route ids. Context caps match
+except for the 1017 override; four routes (`gpt-6.1-sol`, `gpt-6-luna`,
 `gpt-5.6-luna`, `mimo-v2.6-pro`) differ in `output`, which this check does not
-compare. Routes on providers the fleet does not dispatch on keep their own
-windows, and the check reports them rather than clamping them: the
-decision-model paths that use those routes chose those windows. Where two
-copies of one route disagreed, the lower number wins, so a route cannot be
-capped in one file and uncapped in the next.
+compare. Charm Hyper declares its 23 catalog routes in the two `.jsonc` configs
+and follows the same cap, with the same carveout for its DeepSeek route. Its
+`gpt-oss-120b` entry is capped at its native 131072 because the fleet cap is
+the upper bound, not a floor. NanoGPT is the remaining request-only
+catalog-backed aggregator outside this check; enrolling it needs its own
+catalog source and a cap pass over its routes. Routes on providers the check
+does not cover keep their own windows, and the check reports them rather than
+clamping them: the decision-model paths that use those routes chose those
+windows. Where two copies of one route disagreed, the lower number wins, so a
+route cannot be capped in one file and uncapped in the next.
 
 **When it becomes a real bug.** If the fleet's default budget grows past 200k,
-or the 1017 exception stops being intentional, the cap and the
+or a DeepSeek exception stops being intentional, the cap and the
 `ROUTE_CAP_OVERRIDES` table in `scripts/check-fleet-context-cap.py` have to
-move together with the three config values. The check fails when a declared
+move together with the config values. The check fails when a declared
 override is missing or does not equal the table, when a route has no limit,
-when one exceeds its allowed cap, when the three configs declare different
-route sets, when the active compaction buffers disagree, when a declared
-override no longer triggers at 175000, and when the summarizer's window is
-smaller than any route's compaction trigger. It exits 2, not 0, when the
-gateway catalog cannot be read, or when `--apply` would lower a declared
+when one exceeds its allowed cap, when a config omits or drops a route its
+provider's catalog serves, when the active compaction buffers disagree, when a
+declared override no longer triggers at 175000, and when the summarizer's
+window is smaller than any route's compaction trigger. It exits 2, not 0, when
+either catalog cannot be read, or when `--apply` would lower a declared
 override without `--allow-override-lowering`: a check that could not look has
-not passed.
+not passed. `--offline` is the explicit degraded mode.
 
 ## Every sandboxed taskferry dispatch warns that --ro-bind overrides the deny-list
 

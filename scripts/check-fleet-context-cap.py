@@ -16,21 +16,24 @@ is dispatchable whether or not the config names it. Every one of them needs a
 declared limit, and none may exceed the cap except a route listed in
 ROUTE_CAP_OVERRIDES.
 
-The gateway catalog is the canonical source for which routes exist and for
-their native windows. The config files are where the cap is applied.
+Each provider's own catalog is the canonical source for which routes it serves
+and for their native windows. The config files are where the cap is applied.
+LLM Gateway and Charm Hyper are both catalog-backed; the built-in providers
+the fleet names are checked from their configured entries.
 
 Exit codes:
   0  every checked route is capped
   1  a route is not capped (drift)
-  2  a fact could not be determined (the catalog is unreachable and no cache
-     was usable), or --apply refused to lower a declared override
+  2  a fact could not be determined (a required catalog is unreachable and no
+     cache was usable), or --apply refused to lower a declared override
 
 Usage:
   scripts/check-fleet-context-cap.py             # verify, exit 1 on drift
   scripts/check-fleet-context-cap.py --apply     # rewrite the fleet configs to the cap
   scripts/check-fleet-context-cap.py --offline   # check the configured routes only
   scripts/check-fleet-context-cap.py --verbose   # print every route it checked
-  scripts/check-fleet-context-cap.py --catalog PATH   # read the catalog from this file
+  scripts/check-fleet-context-cap.py --catalog PATH        # llmgateway catalog dump
+  scripts/check-fleet-context-cap.py --hyper-catalog PATH  # hyper catalog dump
   scripts/check-fleet-context-cap.py --apply --cap N --allow-override-lowering
                                                  # rewrite a declared override downward
 """
@@ -47,7 +50,15 @@ import urllib.request
 
 FLEET_CAP = 200_000
 DEFAULT_OUTPUT = 32_000
-CATALOG_URL = "https://api.llmgateway.io/v1/models"
+
+# Each provider whose catalog is authoritative for the routes it serves, with
+# the env var that authenticates the request. A provider's catalog lists every
+# route the harness can dispatch even when the config omits it, so the check
+# compares the declared set against it.
+CATALOG_SOURCES = {
+    "llmgateway": ("https://api.llmgateway.io/v1/models", "LLM_GATEWAY_API_KEY"),
+    "hyper": ("https://hyper.charm.land/v1/models", "HYPER_API_KEY"),
+}
 
 # The trigger the 2026-10-24 directive preserves for every declared override.
 # A declared override is exact: parity and native windows cannot lower it, and
@@ -59,6 +70,7 @@ OVERRIDE_TRIGGER = 175_000
 # every fleet config, so the table and the configs cannot diverge silently.
 ROUTE_CAP_OVERRIDES = {
     ("llmgateway", "deepseek-v4.1-flash-1017"): 220_000,
+    ("hyper", "deepseek-v4.1-flash-1017"): 220_000,
 }
 
 
@@ -112,14 +124,17 @@ def route_target(
 # dispatches on top of it.
 FLEET_CONFIGS = [
     (".config/opencode/opencode.json", ("llmgateway",)),
-    (".config/opencode/opencode.jsonc", ("llmgateway", "openai")),
-    (".config/kilo/kilo.jsonc", ("llmgateway", "openai")),
+    (".config/opencode/opencode.jsonc", ("llmgateway", "openai", "hyper")),
+    (".config/kilo/kilo.jsonc", ("llmgateway", "openai", "hyper")),
 ]
 
-# The providers the ferry fleet dispatches on. Every route either provider
+# The providers the ferry fleet dispatches on. Every route each provider
 # declares must carry a limit at or below the cap, and the named routes must
-# exist at all.
-DISPATCH_PROVIDERS = ("llmgateway", "openai")
+# exist at all. Charm Hyper is request-only, but it is capped like a dispatch
+# provider so a named hyper route cannot grow past the fleet budget. NanoGPT is
+# the other request-only aggregator and is still outside this check; enrolling
+# it needs its own catalog source and a cap pass over its routes.
+DISPATCH_PROVIDERS = ("llmgateway", "openai", "hyper")
 
 # Routes that must exist with a cap. gpt-6-luna had no override at all, so it
 # ran at whatever window the provider's catalog reports.
@@ -142,11 +157,11 @@ class CatalogUnavailable(Exception):
     """The catalog could not be read and no usable cache existed."""
 
 
-def cache_path() -> str:
+def cache_path(provider_id: str) -> str:
     base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
         os.path.expanduser("~"), ".cache"
     )
-    return os.path.join(base, "llmgateway", "models.json")
+    return os.path.join(base, provider_id, "models.json")
 
 
 # --------------------------------------------------------------------------
@@ -459,15 +474,18 @@ def _shape_with_cap(shape: str, context: int) -> str:
 # catalog
 # --------------------------------------------------------------------------
 
-def fetch_catalog_raw() -> str:
-    """Fetch the catalog body.
+def fetch_catalog_raw(provider_id: str) -> str:
+    """Fetch one provider's catalog body.
 
-    The request carries the gateway key. Without it the endpoint answers with
-    a wider list that includes embedding, tts and video models, which carry no
-    context window and are not chat routes.
+    The request carries that provider's key. LLM Gateway answers without it
+    with a wider list that includes embedding, tts and video models, which
+    carry no context window and are not chat routes; Hyper's catalog needs its
+    key to list the routes at all.
     """
-    token = os.environ.get("LLM_GATEWAY_API_KEY", "")
-    req = urllib.request.Request(CATALOG_URL + "?detailed=true")
+    url, key_env = CATALOG_SOURCES[provider_id]
+    token = os.environ.get(key_env, "")
+    detailed = "?detailed=true" if provider_id == "llmgateway" else ""
+    req = urllib.request.Request(url + detailed)
     req.add_header("User-Agent", "check-fleet-context-cap/1")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
@@ -475,7 +493,9 @@ def fetch_catalog_raw() -> str:
         return resp.read().decode("utf-8")
 
 
-def load_catalog(path: str | None, offline: bool) -> tuple[dict[str, int], dict[str, str], str]:
+def load_catalog(
+    provider_id: str, path: str | None, offline: bool
+) -> tuple[dict[str, int], dict[str, str], str]:
     """Return ({id: context}, {id: display name}, source description).
 
     In --offline mode no catalog is read at all, from the network or from a
@@ -488,16 +508,16 @@ def load_catalog(path: str | None, offline: bool) -> tuple[dict[str, int], dict[
     if offline:
         return {}, names, "offline (configured routes only)"
     try:
-        raw = fetch_catalog_raw()
+        raw = fetch_catalog_raw(provider_id)
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        cache = cache_path()
+        cache = cache_path(provider_id)
         if os.path.exists(cache):
             with open(cache, encoding="utf-8") as handle:
                 return _catalog_from(handle.read(), f"cached catalog ({cache}), live fetch failed: {exc}", names)
         raise CatalogUnavailable(
-            f"the gateway catalog could not be read ({exc}) and no cache exists at {cache}"
+            f"the {provider_id} catalog could not be read ({exc}) and no cache exists at {cache}"
         ) from exc
-    cache = cache_path()
+    cache = cache_path(provider_id)
     os.makedirs(os.path.dirname(cache), exist_ok=True)
     with open(cache, "w", encoding="utf-8") as handle:
         handle.write(raw)
@@ -515,14 +535,18 @@ def _catalog_from(raw: str, source: str, names: dict[str, str]) -> tuple[dict[st
         data = payload
     else:
         raise CatalogUnavailable(
-            f"{source}: not a gateway catalog dump (expected a list of models or a 'data' list)"
+            f"{source}: not a provider catalog dump (expected a list of models or a 'data' list)"
         )
     contexts: dict[str, int] = {}
     for model in data:
         if not isinstance(model, dict):
             raise CatalogUnavailable(f"{source}: catalog entry is not an object: {model!r}")
         mid = model.get("id")
+        # LLM Gateway calls the window context_length; Hyper calls it
+        # context_window. Both are integer token counts.
         ctx = model.get("context_length")
+        if ctx is None:
+            ctx = model.get("context_window")
         if mid and isinstance(ctx, int) and ctx > 0:
             contexts[mid] = ctx
         if mid:
@@ -698,7 +722,8 @@ def main() -> int:
         action="store_true",
         help="with --apply, allow an explicit --cap below a declared override to rewrite it down",
     )
-    ap.add_argument("--catalog", help="read the catalog from this file instead of the live endpoint")
+    ap.add_argument("--catalog", help="read the llmgateway catalog from this file instead of the live endpoint")
+    ap.add_argument("--hyper-catalog", help="read the hyper catalog from this file instead of the live endpoint")
     args = ap.parse_args()
 
     use_overrides = args.cap is None
@@ -726,18 +751,33 @@ def main() -> int:
                     )
                     return 2
 
-    try:
-        catalog, names, source = load_catalog(args.catalog, args.offline)
-    except CatalogUnavailable as exc:
-        print(f"UNKNOWN: {exc}", file=sys.stderr)
-        print(
-            "The check could not compare against the provider catalog, so it cannot "
-            "prove every served route is capped. Re-run when the gateway is reachable, "
-            "or pass --catalog with a saved dump.",
-            file=sys.stderr,
-        )
-        return 2
-    print(f"catalog source: {source} ({len(catalog)} routes)")
+    catalog_paths = {
+        "llmgateway": args.catalog,
+        "hyper": args.hyper_catalog,
+    }
+    catalogs: dict[str, dict[str, int]] = {}
+    catalog_names: dict[str, dict[str, str]] = {}
+    for provider_id in CATALOG_SOURCES:
+        path = catalog_paths.get(provider_id)
+        try:
+            contexts, names, source = load_catalog(provider_id, path, args.offline)
+        except CatalogUnavailable as exc:
+            # No silent fallback: an explicit dump that does not parse, an
+            # endpoint that is down, and a cache miss are all "could not look"
+            # and must fail the check. --offline is the only way to skip
+            # catalog comparison on purpose.
+            print(f"UNKNOWN: {exc}", file=sys.stderr)
+            print(
+                f"The check could not read the {provider_id} catalog, so it cannot "
+                "prove every route that provider serves is capped. Re-run when the "
+                "endpoint is reachable, or pass a saved dump with "
+                f"{'--catalog' if provider_id == 'llmgateway' else '--hyper-catalog'}.",
+                file=sys.stderr,
+            )
+            return 2
+        catalogs[provider_id] = contexts
+        catalog_names[provider_id] = names
+        print(f"catalog source [{provider_id}]: {source} ({len(contexts)} routes)")
 
     problems: list[str] = []
     changed: list[str] = []
@@ -796,9 +836,11 @@ def main() -> int:
 
             # llmgateway merges the gateway catalog over the config at runtime,
             # so every catalog route is dispatchable and every one of them needs
-            # a cap. The openai provider is a built-in catalog, so only the
-            # routes the fleet names are required to carry one.
-            cap_every_entry = provider_id == "llmgateway"
+            # a cap. Hyper serves its own catalog, so the gateway catalog cannot
+            # clamp it; its declared entries are still required to carry a cap.
+            # The openai provider is a built-in catalog, so only the routes the
+            # fleet names are required to carry one.
+            cap_every_entry = provider_id in ("llmgateway", "hyper")
             required = REQUIRED_ROUTES.get(provider_id, ())
 
             style = "inline"
@@ -818,7 +860,9 @@ def main() -> int:
             # rewrite back to front so earlier offsets stay valid
             for model_id, open_brace, close in reversed(entries):
                 entry = text[open_brace : close + 1]
-                native = catalog.get(model_id)
+                # Each provider's catalog supplies its own native windows; one
+                # provider's endpoint does not describe another's routes.
+                native = catalogs.get(provider_id, {}).get(model_id)
                 has_limit = '"limit"' in entry
                 key = (provider_id, model_id)
                 declared_override = use_overrides and key in ROUTE_CAP_OVERRIDES
@@ -883,11 +927,12 @@ def main() -> int:
                     if args.verbose:
                         print(f"  {rel}: {provider_id}/{model_id} context={ctx} native={native}")
 
-            if args.apply and provider_id == "llmgateway" and catalog:
-                # The three fleet configs declare the same provider block. A
-                # route the gateway no longer serves is stale: the harness
-                # cannot reach it, so the entry is removed and the three
-                # files end up declaring the same set.
+            catalog = catalogs.get(provider_id, {})
+            if args.apply and catalog:
+                # A config that declares a catalog-backed provider should
+                # declare the same route set as the catalog. A route the
+                # provider no longer serves is stale: the harness cannot reach
+                # it, so the entry is removed.
                 span2 = provider_models_span(text, provider_id)
                 assert span2
                 entries2 = model_entries(text, span2)
@@ -920,7 +965,14 @@ def main() -> int:
                         )
                         output = min(DEFAULT_OUTPUT, max(4096, native // 10))
                         addition.append(
-                            _render_entry(model_id, names.get(model_id, model_id), target, output, style, indent)
+                            _render_entry(
+                                model_id,
+                                catalog_names.get(provider_id, {}).get(model_id, model_id),
+                                target,
+                                output,
+                                style,
+                                indent,
+                            )
                         )
                     text = _splice_entries(text, span3[1], addition)
                     for model_id in missing:
@@ -942,7 +994,7 @@ def main() -> int:
                             shape = candidate
                     addition = []
                     for model_id in absent:
-                        native = catalog.get(model_id)
+                        native = catalogs.get(provider_id, {}).get(model_id)
                         target = route_target(
                             provider_id,
                             model_id,
@@ -1008,23 +1060,28 @@ def main() -> int:
         if args.apply and text != original:
             open(rel, "w", encoding="utf-8").write(text)
 
-    if not args.apply and catalog:
-        for rel, _expected in FLEET_CONFIGS:
-            text = config_texts.get(rel)
-            if text is None:
+    if not args.apply:
+        for provider_id, catalog in catalogs.items():
+            if not catalog:
                 continue
-            span = provider_models_span(text, "llmgateway")
-            if span is None:
-                continue
-            configured = {mid for mid, _, _ in model_entries(text, span)}
-            for model_id in sorted(set(catalog) - configured):
-                problems.append(
-                    f"{rel}: the gateway serves {model_id} but no fleet config declares it"
-                )
-            for model_id in sorted(configured - set(catalog)):
-                problems.append(
-                    f"{rel}: declares {model_id}, which the gateway no longer serves"
-                )
+            for rel, expected_providers in FLEET_CONFIGS:
+                if provider_id not in expected_providers:
+                    continue
+                text = config_texts.get(rel)
+                if text is None:
+                    continue
+                span = provider_models_span(text, provider_id)
+                if span is None:
+                    continue
+                configured = {mid for mid, _, _ in model_entries(text, span)}
+                for model_id in sorted(set(catalog) - configured):
+                    problems.append(
+                        f"{rel}: {provider_id} serves {model_id} but this config does not declare it"
+                    )
+                for model_id in sorted(configured - set(catalog)):
+                    problems.append(
+                        f"{rel}: declares {provider_id}/{model_id}, which the provider no longer serves"
+                    )
 
     if not args.apply and use_overrides:
         for (provider_id, model_id), cap in ROUTE_CAP_OVERRIDES.items():
