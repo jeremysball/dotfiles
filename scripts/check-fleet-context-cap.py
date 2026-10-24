@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""check-fleet-context-cap.py: every route the fleet dispatches on is capped at 200k.
+"""check-fleet-context-cap.py: every dispatch route is capped at 200k, with one
+220k exception for DeepSeek V4.1 Flash 1017.
 
 The belief this check names:
 
@@ -12,7 +13,8 @@ The belief this check names:
 A configured limit is what makes the harness compact. The harness merges the
 provider catalog over the config at runtime, so every route a provider serves
 is dispatchable whether or not the config names it. Every one of them needs a
-declared limit, and none may exceed the cap.
+declared limit, and none may exceed the cap except a route listed in
+ROUTE_CAP_OVERRIDES.
 
 The gateway catalog is the canonical source for which routes exist and for
 their native windows. The config files are where the cap is applied.
@@ -44,6 +46,32 @@ import urllib.request
 FLEET_CAP = 200_000
 DEFAULT_OUTPUT = 32_000
 CATALOG_URL = "https://api.llmgateway.io/v1/models"
+
+# Route-specific caps above the fleet default. Keep this in sync with the
+# three fleet configs. The 2026-10-24 user directive raised DeepSeek V4.1
+# Flash 1017 to 220k; the 45k compaction buffer keeps its trigger at 175k,
+# where it was at 200k with a 25k buffer.
+ROUTE_CAP_OVERRIDES = {
+    ("llmgateway", "deepseek-v4.1-flash-1017"): 220_000,
+}
+
+
+def route_cap(
+    provider_id: str,
+    model_id: str,
+    fleet_cap: int,
+    *,
+    use_overrides: bool = True,
+) -> int:
+    """Return the cap for one route, applying a declared override.
+
+    An explicit --cap always wins, so the flag can re-clamp the whole fleet
+    for an experiment.
+    """
+    if not use_overrides:
+        return fleet_cap
+    return ROUTE_CAP_OVERRIDES.get((provider_id, model_id), fleet_cap)
+
 
 # Every fleet config that can carry a dispatch route, with the providers it is
 # expected to declare. The opencode catalog file holds the display-name
@@ -610,9 +638,26 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true", help="rewrite the configs to the cap")
     ap.add_argument("--offline", action="store_true", help="check the configured routes only")
     ap.add_argument("--verbose", action="store_true")
-    ap.add_argument("--cap", type=int, default=FLEET_CAP)
+    ap.add_argument(
+        "--cap",
+        type=int,
+        default=None,
+        help="use this cap instead of the fleet default; cancels route overrides",
+    )
     ap.add_argument("--catalog", help="read the catalog from this file instead of the live endpoint")
     args = ap.parse_args()
+
+    explicit_cap = args.cap is not None
+    if args.cap is None:
+        args.cap = FLEET_CAP
+
+    def route_cap_for(provider_id: str, model_id: str) -> int:
+        return route_cap(
+            provider_id,
+            model_id,
+            args.cap,
+            use_overrides=not explicit_cap,
+        )
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(repo_root)
@@ -702,10 +747,14 @@ def main() -> int:
                 entry = text[open_brace : close + 1]
                 native = catalog.get(model_id)
                 has_limit = '"limit"' in entry
+                route_limit = route_cap_for(provider_id, model_id)
                 if provider_id in DISPATCH_PROVIDERS:
-                    target_cap = min(args.cap, parity_cap.get((provider_id, model_id), args.cap))
+                    target_cap = min(
+                        route_limit,
+                        parity_cap.get((provider_id, model_id), route_limit),
+                    )
                 else:
-                    target_cap = parity_cap.get((provider_id, model_id), args.cap)
+                    target_cap = parity_cap.get((provider_id, model_id), route_limit)
                 if args.apply:
                     if has_limit:
                         new_entry, did_change = _clamp_context(entry, target_cap, native)
@@ -784,7 +833,7 @@ def main() -> int:
                     addition = []
                     for model_id in missing:
                         native = catalog[model_id]
-                        target = min(args.cap, native)
+                        target = min(route_cap_for(provider_id, model_id), native)
                         output = min(DEFAULT_OUTPUT, max(4096, native // 10))
                         addition.append(
                             _render_entry(model_id, names.get(model_id, model_id), target, output, style, indent)
@@ -809,7 +858,10 @@ def main() -> int:
                             shape = candidate
                     addition = []
                     for model_id in absent:
-                        target = min(args.cap, catalog.get(model_id, args.cap))
+                        target = min(
+                            route_cap_for(provider_id, model_id),
+                            catalog.get(model_id, args.cap),
+                        )
                         limit = _shape_with_cap(shape, target) if shape else f'"limit": {{ "context": {target}, "output": {DEFAULT_OUTPUT} }}'
                         addition.append(f'{indent}"{model_id}": {{ {limit} }}')
                     text = _splice_entries(text, span2[1], addition)
@@ -840,7 +892,10 @@ def main() -> int:
             for model_id, open_b, close_b in model_entries(text, span_p):
                 entry = text[open_b : close_b + 1]
                 m = re.search(r'"context"\s*:\s*(\d+)', entry)
-                target_cap = parity_cap.get((provider_id, model_id), args.cap)
+                target_cap = parity_cap.get(
+                    (provider_id, model_id),
+                    route_cap_for(provider_id, model_id),
+                )
                 if m:
                     if int(m.group(1)) > target_cap:
                         if not args.apply:
@@ -894,15 +949,15 @@ def main() -> int:
 
     if args.apply:
         if changed:
-            print(f"applied the {args.cap} cap to {len(changed)} route(s):")
+            print(f"applied the fleet cap to {len(changed)} route(s):")
             for line in changed:
                 print(f"  {line}")
         else:
-            print(f"every route already carries a limit at or below {args.cap}")
+            print("every route already carries a limit at or below its cap")
         return 0
 
     if problems:
-        print(f"FAIL: {len(problems)} fleet route(s) are not capped at {args.cap}:", file=sys.stderr)
+        print(f"FAIL: {len(problems)} fleet route(s) exceed the allowed cap:", file=sys.stderr)
         for line in problems:
             print(f"  {line}", file=sys.stderr)
         return 1
@@ -912,7 +967,17 @@ def main() -> int:
         for line in reports:
             print(f"  {line}")
 
-    print(f"OK: every dispatch route in the fleet configs is capped at {args.cap}")
+    if not explicit_cap and ROUTE_CAP_OVERRIDES:
+        overrides = ", ".join(
+            f"{provider_id}/{model_id} at {cap}"
+            for (provider_id, model_id), cap in sorted(ROUTE_CAP_OVERRIDES.items())
+        )
+        print(
+            f"OK: every dispatch route in the fleet configs is capped at {args.cap}, "
+            f"except {overrides}"
+        )
+    else:
+        print(f"OK: every dispatch route in the fleet configs is capped at {args.cap}")
     return 0
 
 

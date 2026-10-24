@@ -242,16 +242,18 @@ staged-only gate would need a temporary index or worktree.
 notice appears in a repo that does declare a check task, or if a warning names
 a repo-relative path as missing when the path exists in `~/.claude/skills`.
 
-## Every dispatch route is capped at 200k even though the provider serves 1M
+## Almost every dispatch route is capped at 200k even though the provider serves 1M
 
 **What a reader will observe.** `.config/opencode/opencode.json`,
 `.config/opencode/opencode.jsonc` and `.config/kilo/kilo.jsonc` give every
 route a `limit.context` of 200000, or the route's own native window when that
-is smaller (128000 for `gpt-4o`, for example). The gateway's catalog reports a
-native window of up to 1,050,000 tokens for the same models, and
+is smaller (128000 for `gpt-4o`, for example). DeepSeek V4.1 Flash 1017 is the
+one exception at 220000, and the compaction buffer is 45000, so 1017 triggers
+at 175000 while every 200k route triggers at 155000. The gateway's catalog
+reports a native window of up to 1,050,000 tokens for the same models, and
 `gpt-6.1-sol` in particular was capped at 500k until 2026-10-19.
 
-**Why it is deliberate.** The 200k cap is the fleet's budget, not the
+**Why it is deliberate.** The 200k cap is the fleet's default budget, not the
 provider's window. A configured `limit.context` is what makes the harness
 compact: an uncapped route inherits the catalog window, so a session on it
 grows past 200k without ever triggering compaction. That is exactly what the
@@ -259,19 +261,28 @@ grows past 200k without ever triggering compaction. That is exactly what the
 events. The harness merges the provider catalog over the config at runtime, so
 a route nobody declared is still dispatchable, just uncapped.
 
-The cap covers all 144 routes the gateway serves, declared identically in all
-three fleet configs. Routes on providers the fleet does not dispatch on keep
-their own windows, and the check reports them rather than clamping them: the
-decision-model paths that use those routes chose those windows. Where two
-copies of one route disagreed, the lower number wins, so a route cannot be
-capped in one file and uncapped in the next.
+The 1017 exception is a 2026-10-24 user directive: 220000 of context with a
+45000 buffer keeps its compaction trigger at the same 175000 as the old
+200000/25000 pair, with 20k more headroom for the summary call. The buffer is
+global, so every 200k route now compacts at 155000. That earlier trigger is
+deliberate: the fleet chose headroom over the last 45k of each 200k window.
 
-**When it becomes a real bug.** If the fleet's real budget grows past 200k,
-the cap and `scripts/check-fleet-context-cap.py` have to move together. The
-check fails when a route has no limit, when one exceeds the cap, when the
-three configs declare different route sets, and when the summarizer's window
-is smaller than the point where compaction fires. It exits 2, not 0, when the
-gateway catalog cannot be read: a check that could not look has not passed.
+The fleet configs declare all 141 routes the gateway serves, identically
+except for the single 1017 override. Every route uses the 200k default, or its
+native window when smaller, except 1017 at 220000. Routes on providers the
+fleet does not dispatch on keep their own windows, and the check reports them
+rather than clamping them: the decision-model paths that use those routes chose
+those windows. Where two copies of one route disagreed, the lower number wins,
+so a route cannot be capped in one file and uncapped in the next.
+
+**When it becomes a real bug.** If the fleet's default budget grows past 200k,
+or the 1017 exception stops being intentional, the cap,
+`ROUTE_CAP_OVERRIDES` and `scripts/check-fleet-context-cap.py` have to move
+together. The check fails when a route has no limit, when one exceeds its
+allowed cap, when the three configs declare different route sets, and when the
+summarizer's window is smaller than the point where compaction fires. It exits
+2, not 0, when the gateway catalog cannot be read: a check that could not look
+has not passed.
 
 ## Every sandboxed taskferry dispatch warns that --ro-bind overrides the deny-list
 
