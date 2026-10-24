@@ -233,6 +233,8 @@ experimental = true
 # systemd
 "~/.config/systemd/user/bumblebee-nightly.service" = {}
 "~/.config/systemd/user/bumblebee-nightly.timer" = {}
+"~/.config/systemd/user/cdp-forward.service" = {}
+"~/.config/systemd/user/cdp-forward.socket" = {}
 "~/.config/systemd/user/mise-upgrade.service" = {}
 "~/.config/systemd/user/mise-upgrade.timer" = {}
 

@@ -10,6 +10,7 @@ Description=Local end of the Chrome DevTools Protocol forward to the Vivaldi on 
 
 [Socket]
 ListenStream=127.0.0.1:9222
+ListenStream=[::1]:9222
 
 [Install]
 WantedBy=sockets.target

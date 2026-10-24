@@ -1,7 +1,7 @@
 [Unit]
 Description=Forward Chrome DevTools Protocol to the Vivaldi on sisyphus
 Requires=cdp-forward.socket
-After=cdp-forward.socket network-online.target
+After=cdp-forward.socket
 
 # Socket-activated: nothing runs until a client connects, and it exits after
 # five idle minutes. The connection is forwarded raw, so the client's Host
