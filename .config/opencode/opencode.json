@@ -153,10 +153,6 @@
           "name": "Claude Haiku 5.5",
           "limit": { "context": 200000, "output": 32000 }
         },
-        "claude-opus-4-1-20250805": {
-          "name": "Claude Opus 4.1",
-          "limit": { "context": 200000, "output": 20000 }
-        },
         "claude-opus-4-5-20251101": {
           "name": "Claude Opus 4.5",
           "limit": { "context": 200000, "output": 20000 }
@@ -336,10 +332,6 @@
           "name": "GPT-4.1 Mini",
           "limit": { "context": 200000, "output": 32000 }
         },
-        "gpt-4.1-nano": {
-          "name": "GPT-4.1 Nano",
-          "limit": { "context": 200000, "output": 32000 }
-        },
         "gpt-4o": {
           "name": "GPT-4o",
           "limit": { "context": 128000, "output": 12800 }
@@ -476,10 +468,6 @@
           "name": "Hy4 Preview",
           "limit": { "context": 200000, "output": 32000 }
         },
-        "kimi-k2-thinking": {
-          "name": "Kimi K2 Thinking",
-          "limit": { "context": 200000, "output": 26214 }
-        },
         "kimi-k2.5": {
           "name": "Kimi K2.5",
           "limit": { "context": 200000, "output": 26214 }
@@ -511,14 +499,6 @@
         "ling-3.0-flash-vl": {
           "name": "Ling 3.0 Flash VL",
           "limit": { "context": 131072, "output": 13107 }
-        },
-        "mimo-v2.5": {
-          "name": "MiMo V2.5",
-          "limit": { "context": 200000, "output": 32000 }
-        },
-        "mimo-v2.5-pro": {
-          "name": "MiMo V2.5 Pro",
-          "limit": { "context": 200000, "output": 32000 }
         },
         "mimo-v2.6-flash": {
           "name": "MiMo V2.6 Flash",
@@ -588,10 +568,6 @@
           "name": "Nemotron 3 Ultra 550B",
           "limit": { "context": 200000, "output": 26214 }
         },
-        "o4-mini": {
-          "name": "o4 Mini",
-          "limit": { "context": 200000, "output": 20000 }
-        },
         "qwen-flash": {
           "name": "Qwen Flash",
           "limit": { "context": 200000, "output": 32000 }
@@ -603,10 +579,6 @@
         "qwen-plus-latest": {
           "name": "Qwen Plus Latest",
           "limit": { "context": 200000, "output": 32000 }
-        },
-        "qwen3-coder-480b-a35b-instruct": {
-          "name": "Qwen3 Coder 480B A35B Instruct",
-          "limit": { "context": 200000, "output": 26214 }
         },
         "qwen3-coder-flash": {
           "name": "Qwen3 Coder Flash",
@@ -702,7 +674,7 @@
         },
         "deepseek-v4.1-flash-1017": {
           "name": "DeepSeek V4.1 Flash 1017",
-          "limit": { "context": 200000, "output": 32000 }
+          "limit": { "context": 220000, "output": 32000 }
         },
         "gemini-4-argon": {
           "name": "Gemini 4 Argon",
@@ -715,7 +687,11 @@
         "muse-wonder-1.0": {
           "name": "Muse Wonder 1.0",
           "limit": { "context": 200000, "output": 32000 }
-        }
+        },
+        "grok-4-20-non-reasoning": { "name": "Grok 4.20 Non-Reasoning", "limit": { "context": 200000, "output": 32000 } },
+        "grok-4-20-reasoning": { "name": "Grok 4.20 Reasoning", "limit": { "context": 200000, "output": 32000 } },
+        "kimi-k3.1-pro": { "name": "Kimi K3.1 Pro", "limit": { "context": 200000, "output": 32000 } },
+        "kimi-k3.1-pro-highspeed": { "name": "Kimi K3.1 Pro Highspeed", "limit": { "context": 200000, "output": 32000 } }
 }
     }
   }

@@ -29,7 +29,7 @@ jobs:
       - uses: jdx/mise-action@v2
         with:
           install: false
-      - name: Check every dispatch route is capped at 200k
+      - name: Check every dispatch route is capped at the fleet default, with declared exceptions
         env:
           LLM_GATEWAY_API_KEY: ${{ secrets.LLM_GATEWAY_API_KEY }}
         run: |
