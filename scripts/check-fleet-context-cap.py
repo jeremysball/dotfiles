@@ -701,8 +701,7 @@ def main() -> int:
     ap.add_argument("--catalog", help="read the catalog from this file instead of the live endpoint")
     args = ap.parse_args()
 
-    explicit_cap = args.cap is not None
-    use_overrides = not explicit_cap
+    use_overrides = args.cap is None
     if args.cap is None:
         args.cap = FLEET_CAP
 
@@ -714,7 +713,7 @@ def main() -> int:
         if os.path.exists(rel):
             config_texts[rel] = open(rel, encoding="utf-8").read()
 
-    if args.apply and explicit_cap and not args.allow_override_lowering:
+    if args.apply and not use_overrides and not args.allow_override_lowering:
         for rel, text in config_texts.items():
             for (provider_id, model_id), _cap in ROUTE_CAP_OVERRIDES.items():
                 current = _model_limit(text, provider_id, model_id)
