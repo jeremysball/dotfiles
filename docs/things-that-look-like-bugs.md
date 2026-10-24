@@ -277,11 +277,13 @@ except for the 1017 override; four routes (`gpt-6.1-sol`, `gpt-6-luna`,
 compare. Charm Hyper declares its 23 catalog routes in the two `.jsonc` configs
 and follows the same cap, with the same carveout for its DeepSeek route. Its
 `gpt-oss-120b` entry is capped at its native 131072 because the fleet cap is
-the upper bound, not a floor. Routes on providers the check does not cover
-keep their own windows, and the check reports them rather than clamping them:
-the decision-model paths that use those routes chose those windows. Where two
-copies of one route disagreed, the lower number wins, so a route cannot be
-capped in one file and uncapped in the next.
+the upper bound, not a floor. NanoGPT is the remaining request-only
+catalog-backed aggregator outside this check; enrolling it needs its own
+catalog source and a cap pass over its routes. Routes on providers the check
+does not cover keep their own windows, and the check reports them rather than
+clamping them: the decision-model paths that use those routes chose those
+windows. Where two copies of one route disagreed, the lower number wins, so a
+route cannot be capped in one file and uncapped in the next.
 
 **When it becomes a real bug.** If the fleet's default budget grows past 200k,
 or a DeepSeek exception stops being intentional, the cap and the
@@ -292,10 +294,9 @@ when one exceeds its allowed cap, when a config omits or drops a route its
 provider's catalog serves, when the active compaction buffers disagree, when a
 declared override no longer triggers at 175000, and when the summarizer's
 window is smaller than any route's compaction trigger. It exits 2, not 0, when
-the gateway catalog cannot be read, or when `--apply` would lower a declared
+either catalog cannot be read, or when `--apply` would lower a declared
 override without `--allow-override-lowering`: a check that could not look has
-not passed. An unreachable Hyper catalog is reported and the configured Hyper
-routes are still checked, because Hyper's key is not present on every runner.
+not passed. `--offline` is the explicit degraded mode.
 
 ## Every sandboxed taskferry dispatch warns that --ro-bind overrides the deny-list
 

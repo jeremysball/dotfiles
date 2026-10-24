@@ -131,7 +131,9 @@ FLEET_CONFIGS = [
 # The providers the ferry fleet dispatches on. Every route each provider
 # declares must carry a limit at or below the cap, and the named routes must
 # exist at all. Charm Hyper is request-only, but it is capped like a dispatch
-# provider so a named hyper route cannot grow past the fleet budget.
+# provider so a named hyper route cannot grow past the fleet budget. NanoGPT is
+# the other request-only aggregator and is still outside this check; enrolling
+# it needs its own catalog source and a cap pass over its routes.
 DISPATCH_PROVIDERS = ("llmgateway", "openai", "hyper")
 
 # Routes that must exist with a cap. gpt-6-luna had no override at all, so it
@@ -756,26 +758,23 @@ def main() -> int:
     catalogs: dict[str, dict[str, int]] = {}
     catalog_names: dict[str, dict[str, str]] = {}
     for provider_id in CATALOG_SOURCES:
+        path = catalog_paths.get(provider_id)
         try:
-            contexts, names, source = load_catalog(
-                provider_id, catalog_paths.get(provider_id), args.offline
-            )
+            contexts, names, source = load_catalog(provider_id, path, args.offline)
         except CatalogUnavailable as exc:
-            if provider_id == "llmgateway":
-                print(f"UNKNOWN: {exc}", file=sys.stderr)
-                print(
-                    "The check could not compare against the provider catalog, so it cannot "
-                    "prove every served route is capped. Re-run when the gateway is reachable, "
-                    "or pass --catalog with a saved dump.",
-                    file=sys.stderr,
-                )
-                return 2
-            # Hyper is request-only and its key may be absent on a runner that
-            # has no HYPER_API_KEY secret. The configured routes are still
-            # checked; only the catalog comparison is skipped.
-            if args.verbose:
-                print(f"  hyper catalog unavailable, configured routes only: {exc}")
-            contexts, names, source = {}, {}, "unavailable (configured routes only)"
+            # No silent fallback: an explicit dump that does not parse, an
+            # endpoint that is down, and a cache miss are all "could not look"
+            # and must fail the check. --offline is the only way to skip
+            # catalog comparison on purpose.
+            print(f"UNKNOWN: {exc}", file=sys.stderr)
+            print(
+                f"The check could not read the {provider_id} catalog, so it cannot "
+                "prove every route that provider serves is capped. Re-run when the "
+                "endpoint is reachable, or pass a saved dump with "
+                f"{'--catalog' if provider_id == 'llmgateway' else '--hyper-catalog'}.",
+                file=sys.stderr,
+            )
+            return 2
         catalogs[provider_id] = contexts
         catalog_names[provider_id] = names
         print(f"catalog source [{provider_id}]: {source} ({len(contexts)} routes)")

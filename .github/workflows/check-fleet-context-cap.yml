@@ -34,6 +34,10 @@ jobs:
           LLM_GATEWAY_API_KEY: ${{ secrets.LLM_GATEWAY_API_KEY }}
           HYPER_API_KEY: ${{ secrets.HYPER_API_KEY }}
         run: |
+          # Live mode loads both catalogs in one run, so it is gated on the
+          # gateway key: without it the gateway catalog is unreadable and the
+          # check exits 2 before it can use the Hyper catalog. The offline
+          # branch is the deliberate no-key CI path, not a per-provider choice.
           if [ -n "$LLM_GATEWAY_API_KEY" ]; then
             # Live catalog: also catches a route the gateway starts serving
             # that no fleet config declares, and a route it stops serving.
