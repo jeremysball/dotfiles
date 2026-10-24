@@ -58,13 +58,13 @@
     }
   },
   "compaction": {
-    // Auto-compact with a 45k trigger buffer, matching opencode. The buffer
-    // was 25k until 2026-10-24, when DeepSeek V4.1 Flash 1017 was raised to
-    // a 220k cap: 220k - 45k keeps that route's trigger at 175k with 20k
-    // more headroom for the summary call. Every 200k route now triggers at
-    // 155k. "buffer" is the current name for the old "reserved" knob: the
-    // headroom the compaction call needs. Kilo ran with buffer 0 before
-    // 2026-08-31, so compaction had no room to produce a summary.
+    // Auto-compact with the fleet's 45k trigger buffer, matching opencode.
+    // The 2026-10-24 1017 exception, the 175k trigger, and the earlier
+    // trigger for every 200k route are documented in
+    // docs/things-that-look-like-bugs.md. "buffer" is the current name for
+    // the old "reserved" knob: the headroom the compaction call needs. Kilo
+    // used buffer 0 until 2026-10-19, so compaction had no room to produce a
+    // summary.
     "auto": true,
     "prune": true,
     "tail_turns": 2,
@@ -430,8 +430,9 @@
       // is called with raw HTTP + Bearer $LLM_GATEWAY_API_KEY, not through this
       // block.
       //
-      // Context follows this file's fleet cap (200k; 500k for gpt-6.1-sol per
-      // the 2026-10-03 choice); native windows noted per model.
+      // Context follows this file's fleet cap (200k); the 2026-10-03
+      // gpt-6.1-sol 500k choice was reversed on 2026-10-19. Native windows
+      // are noted per model.
       "npm": "@ai-sdk/openai-compatible",
       "name": "LLM Gateway",
       "options": {
@@ -612,9 +613,7 @@
         "seed-2-0-mini-260428": { "name": "Seed 2.0 Mini (260428)", "limit": { "context": 200000, "output": 26214 } },
         "seed-2-0-pro-260328": { "name": "Seed 2.0 Pro (260328)", "limit": { "context": 200000, "output": 26214 } },
         "step-3.7-flash": { "name": "Step 3.7 Flash", "limit": { "context": 200000, "output": 26214 } },
-        // The one dispatch route above the 200k fleet cap, raised by user
-        // directive on 2026-10-24. The 45k compaction buffer keeps its
-        // trigger at 175k.
+        // 2026-10-24 directive; see docs/things-that-look-like-bugs.md.
         "deepseek-v4.1-flash-1017": { "name": "DeepSeek V4.1 Flash 1017", "limit": { "context": 220000, "output": 32000 } },
         "gemini-4-argon": { "name": "Gemini 4 Argon", "limit": { "context": 200000, "output": 32000 } },
         "minimax-m3.1-flash": { "name": "MiniMax M3.1 Flash", "limit": { "context": 200000, "output": 32000 } },

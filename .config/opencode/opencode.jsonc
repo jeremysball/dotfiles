@@ -31,11 +31,9 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
-  // Compaction: the fleet cap is 200k tokens for dispatch routes. DeepSeek
-  // V4.1 Flash 1017 is the one 220k exception, raised by user directive on
-  // 2026-10-24. The trigger buffer was raised from 25k to 45k at the same
-  // time, so 1017 still compacts at 175k (220k - 45k) with 20k more headroom
-  // for the summary call; every 200k route now compacts at 155k.
+  // Compaction: the fleet cap is 200k tokens for dispatch routes. The
+  // 2026-10-24 1017 exception and the shared 45k buffer are documented in
+  // docs/things-that-look-like-bugs.md.
   // (per the schema, `reserved` is a literal token buffer subtracted from
   // limit.context, NOT a percentage; verified against
   // https://opencode.ai/config.json's Config.compaction.reserved
@@ -859,8 +857,9 @@
       // and is called with raw HTTP + Bearer $LLM_GATEWAY_API_KEY, not
       // through this block.
       //
-      // Context follows this file's fleet cap (200k; 500k for gpt-6.1-sol
-      // per the 2026-10-03 choice); native windows noted per model.
+      // Context follows this file's fleet cap (200k); the 2026-10-03
+      // gpt-6.1-sol 500k choice was reversed on 2026-10-19. Native windows
+      // are noted per model.
       "npm": "@ai-sdk/openai-compatible",
       "name": "LLM Gateway",
       "options": {
@@ -921,9 +920,7 @@
         "deepseek-v4-flash": { "name": "DeepSeek V4 Flash", "limit": { "context": 200000, "output": 32000 } },
         "deepseek-v4-pro": { "name": "DeepSeek V4 Pro", "limit": { "context": 200000, "output": 32000 } },
         "deepseek-v4.1-flash": { "name": "DeepSeek V4.1 Flash", "limit": { "context": 200000, "output": 32000 } },
-        // The one dispatch route above the 200k fleet cap, raised by user
-        // directive on 2026-10-24. The 45k compaction buffer keeps its
-        // trigger at 175k.
+        // 2026-10-24 directive; see docs/things-that-look-like-bugs.md.
         "deepseek-v4.1-flash-1017": { "name": "DeepSeek V4.1 Flash 1017", "limit": { "context": 220000, "output": 32000 } },
         "fugu-max": { "name": "Fugu Max", "limit": { "context": 200000, "output": 32000 } },
         "fugu-ultra": { "name": "Fugu Ultra", "limit": { "context": 200000, "output": 32000 } },

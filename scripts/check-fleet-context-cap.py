@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""check-fleet-context-cap.py: every dispatch route is capped at 200k, with one
-220k exception for DeepSeek V4.1 Flash 1017.
+"""check-fleet-context-cap.py: every dispatch route is capped at 200k, with
+declared exceptions from ROUTE_CAP_OVERRIDES.
 
 The belief this check names:
 
@@ -23,7 +23,7 @@ Exit codes:
   0  every checked route is capped
   1  a route is not capped (drift)
   2  a fact could not be determined (the catalog is unreachable and no cache
-     was usable), so the check could not do its job
+     was usable), or --apply refused to lower a declared override
 
 Usage:
   scripts/check-fleet-context-cap.py             # verify, exit 1 on drift
@@ -31,6 +31,8 @@ Usage:
   scripts/check-fleet-context-cap.py --offline   # check the configured routes only
   scripts/check-fleet-context-cap.py --verbose   # print every route it checked
   scripts/check-fleet-context-cap.py --catalog PATH   # read the catalog from this file
+  scripts/check-fleet-context-cap.py --apply --cap N --allow-override-lowering
+                                                 # rewrite a declared override downward
 """
 
 from __future__ import annotations
@@ -47,10 +49,14 @@ FLEET_CAP = 200_000
 DEFAULT_OUTPUT = 32_000
 CATALOG_URL = "https://api.llmgateway.io/v1/models"
 
-# Route-specific caps above the fleet default. Keep this in sync with the
-# three fleet configs. The 2026-10-24 user directive raised DeepSeek V4.1
-# Flash 1017 to 220k; the 45k compaction buffer keeps its trigger at 175k,
-# where it was at 200k with a 25k buffer.
+# The trigger the 2026-10-24 directive preserves for every declared override.
+# A declared override is exact: parity and native windows cannot lower it, and
+# each active compaction block must put its trigger here. See
+# docs/things-that-look-like-bugs.md for the rationale.
+OVERRIDE_TRIGGER = 175_000
+
+# Route-specific caps above the fleet default. The check enforces each value in
+# every fleet config, so the table and the configs cannot diverge silently.
 ROUTE_CAP_OVERRIDES = {
     ("llmgateway", "deepseek-v4.1-flash-1017"): 220_000,
 }
@@ -61,16 +67,43 @@ def route_cap(
     model_id: str,
     fleet_cap: int,
     *,
-    use_overrides: bool = True,
+    use_overrides: bool,
 ) -> int:
-    """Return the cap for one route, applying a declared override.
+    """Return the cap for one route.
 
-    An explicit --cap always wins, so the flag can re-clamp the whole fleet
-    for an experiment.
+    A declared override applies unless use_overrides is false. An explicit
+    --cap sets use_overrides false for validation; --apply refuses to lower a
+    declared override without --allow-override-lowering.
     """
     if not use_overrides:
         return fleet_cap
     return ROUTE_CAP_OVERRIDES.get((provider_id, model_id), fleet_cap)
+
+
+def route_target(
+    provider_id: str,
+    model_id: str,
+    fleet_cap: int,
+    parity_cap: dict[tuple[str, str], int] | None,
+    *,
+    use_overrides: bool,
+    native: int | None = None,
+) -> int:
+    """Resolve the target cap for one route.
+
+    A declared override is exact, so neither a sibling's lower value nor the
+    native window may drag it down. Other routes take the lower of the fleet
+    cap, the sibling parity floor, and the native window.
+    """
+    key = (provider_id, model_id)
+    cap = route_cap(provider_id, model_id, fleet_cap, use_overrides=use_overrides)
+    if use_overrides and key in ROUTE_CAP_OVERRIDES:
+        return cap
+    if parity_cap is not None:
+        cap = min(cap, parity_cap.get(key, cap))
+    if native is not None:
+        cap = min(cap, native)
+    return cap
 
 
 # Every fleet config that can carry a dispatch route, with the providers it is
@@ -312,6 +345,25 @@ def _clamp_context(entry: str, cap: int, native: int | None) -> tuple[str, bool]
     current = int(m.group(1))
     target = min(cap, native) if native else cap
     if current <= target:
+        return entry, False
+    new_entry = entry[: m.start(1)] + str(target) + entry[m.end(1) :]
+    mi = re.search(r'"input"\s*:\s*(\d+)', new_entry)
+    if mi and int(mi.group(1)) > target:
+        new_entry = new_entry[: mi.start(1)] + str(target) + new_entry[mi.end(1) :]
+    return new_entry, True
+
+
+def _set_context(entry: str, target: int) -> tuple[str, bool]:
+    """Set an existing limit.context to target, raising or lowering it.
+
+    A declared override must be restored, not just clamped, so --apply can
+    repair a lagging sibling instead of lowering the rest of the fleet.
+    """
+    m = re.search(r'"context"\s*:\s*(\d+)', entry)
+    if not m:
+        return entry, False
+    current = int(m.group(1))
+    if current == target:
         return entry, False
     new_entry = entry[: m.start(1)] + str(target) + entry[m.end(1) :]
     mi = re.search(r'"input"\s*:\s*(\d+)', new_entry)
@@ -563,56 +615,50 @@ def _compaction_buffer(text: str) -> int:
     return 0
 
 
-def _default_route(text: str) -> tuple[str, str] | None:
-    """Return (provider, model) of the config's default model.
-
-    Two shapes appear in the fleet configs: a plain string
-    ("model": "llmgateway/mimo-v2.6-pro") and an object
-    ("model": {"providerID": "llmgateway", "model": "mimo-v2.6-pro"}).
-    """
-    plain = _top_level_string(text, "model")
-    if plain and "/" in plain:
-        provider, _, model = plain.partition("/")
-        return provider, model
-    m = re.search(
-        r'"model"\s*:\s*\{[^{}]*?"providerID"\s*:\s*"([^"]+)"[^{}]*?"model"\s*:\s*"([^"]+)"',
-        text,
-        re.S,
-    )
-    if m:
-        return m.group(1), m.group(2)
-    return None
-
-
 def check_summarizer_window(text: str, rel: str, problems: list[str]) -> None:
     """The summarizer must be able to hold what it will summarize.
 
     Compaction fires at (limit.context - buffer). If the summarizer's own
     window is smaller than that, every compaction attempt overflows and the
     session dies with "Compaction exhausted" instead of compacting.
+
+    Every dispatch route is checked, not just the default: a per-route override
+    can move the highest trigger away from the default route.
     """
-    main = _default_route(text)
     route = _summarizer_route(text)
-    if not main or not route:
+    if not route:
         return
     buffer_val = _compaction_buffer(text)
-    main_provider, main_model = main
-    small_provider, small_model = route
-    main_limit = _model_limit(text, main_provider, main_model)
-    small_limit = _model_limit(text, small_provider, small_model)
-    if main_limit is None:
-        problems.append(f"{rel}: the default model {main_provider}/{main_model} has no configured limit.context")
+    if buffer_val == 0:
+        # The opencode catalog file carries no compaction block; its effective
+        # session config merges the sibling .jsonc block.
         return
+    small_provider, small_model = route
+    small_limit = _model_limit(text, small_provider, small_model)
     if small_limit is None:
         problems.append(f"{rel}: the summarizer {small_provider}/{small_model} has no configured limit.context")
         return
-    trigger = main_limit - buffer_val
-    if small_limit < trigger:
-        problems.append(
-            f"{rel}: compaction fires at {trigger} tokens (limit {main_limit} - buffer {buffer_val}) "
-            f"but the summarizer {small_provider}/{small_model} only has a {small_limit} token window, "
-            "so every compaction attempt would overflow"
-        )
+
+    for provider_id, _blk in provider_blocks(text):
+        if provider_id not in DISPATCH_PROVIDERS:
+            continue
+        span = provider_models_span(text, provider_id)
+        if span is None:
+            continue
+        for model_id, open_brace, close in model_entries(text, span):
+            entry = text[open_brace : close + 1]
+            m = re.search(r'"context"\s*:\s*(\d+)', entry)
+            if not m:
+                continue
+            context = int(m.group(1))
+            trigger = context - buffer_val
+            if small_limit < trigger:
+                problems.append(
+                    f"{rel}: {provider_id}/{model_id} compaction fires at {trigger} tokens "
+                    f"(context {context} - buffer {buffer_val}) but the summarizer "
+                    f"{small_provider}/{small_model} only has a {small_limit} token window, "
+                    "so every compaction attempt would overflow"
+                )
 
 
 def _model_limit(text: str, provider_id: str, model_id: str) -> int | None:
@@ -642,25 +688,44 @@ def main() -> int:
         "--cap",
         type=int,
         default=None,
-        help="use this cap instead of the fleet default; cancels route overrides",
+        help=(
+            "use this cap instead of the fleet default; cancels route overrides. "
+            "--apply refuses to lower a declared override without --allow-override-lowering"
+        ),
+    )
+    ap.add_argument(
+        "--allow-override-lowering",
+        action="store_true",
+        help="with --apply, allow an explicit --cap below a declared override to rewrite it down",
     )
     ap.add_argument("--catalog", help="read the catalog from this file instead of the live endpoint")
     args = ap.parse_args()
 
     explicit_cap = args.cap is not None
+    use_overrides = not explicit_cap
     if args.cap is None:
         args.cap = FLEET_CAP
 
-    def route_cap_for(provider_id: str, model_id: str) -> int:
-        return route_cap(
-            provider_id,
-            model_id,
-            args.cap,
-            use_overrides=not explicit_cap,
-        )
-
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(repo_root)
+
+    config_texts: dict[str, str] = {}
+    for rel, _expected in FLEET_CONFIGS:
+        if os.path.exists(rel):
+            config_texts[rel] = open(rel, encoding="utf-8").read()
+
+    if args.apply and explicit_cap and not args.allow_override_lowering:
+        for rel, text in config_texts.items():
+            for (provider_id, model_id), _cap in ROUTE_CAP_OVERRIDES.items():
+                current = _model_limit(text, provider_id, model_id)
+                if current is not None and current > args.cap:
+                    print(
+                        f"REFUSING: {rel}: {provider_id}/{model_id} is {current}; "
+                        f"--cap {args.cap} would lower a declared override. "
+                        "Pass --allow-override-lowering to do that.",
+                        file=sys.stderr,
+                    )
+                    return 2
 
     try:
         catalog, names, source = load_catalog(args.catalog, args.offline)
@@ -680,12 +745,17 @@ def main() -> int:
     reports: list[str] = []
 
     # Parity: the lowest cap any fleet config declares for a route wins, so two
-    # copies of one route cannot disagree about its window.
+    # copies of one route cannot disagree about its window. A declared override
+    # is exempt from the floor and enforced by its own exact-value check.
     parity_cap: dict[tuple[str, str], int] = {}
+    config_buffers: dict[str, int] = {}
     for rel, _expected in FLEET_CONFIGS:
-        if not os.path.exists(rel):
+        text = config_texts.get(rel)
+        if text is None:
             continue
-        text = open(rel, encoding="utf-8").read()
+        buffer_val = _compaction_buffer(text)
+        if buffer_val:
+            config_buffers[rel] = buffer_val
         for provider_id, blk in provider_blocks(text):
             span_p = provider_models_span(text, provider_id)
             if span_p is None:
@@ -700,11 +770,15 @@ def main() -> int:
                 if prior is None or int(m.group(1)) < prior:
                     parity_cap[key] = int(m.group(1))
 
+    if len(set(config_buffers.values())) > 1:
+        rendered = ", ".join(f"{rel}={cap}" for rel, cap in sorted(config_buffers.items()))
+        problems.append(f"compaction buffers disagree across the active configs: {rendered}")
+
     for rel, expected_providers in FLEET_CONFIGS:
-        if not os.path.exists(rel):
+        original = config_texts.get(rel)
+        if original is None:
             problems.append(f"{rel}: file is missing")
             continue
-        original = open(rel, encoding="utf-8").read()
         text = original
 
         for provider_id in expected_providers:
@@ -747,17 +821,21 @@ def main() -> int:
                 entry = text[open_brace : close + 1]
                 native = catalog.get(model_id)
                 has_limit = '"limit"' in entry
-                route_limit = route_cap_for(provider_id, model_id)
-                if provider_id in DISPATCH_PROVIDERS:
-                    target_cap = min(
-                        route_limit,
-                        parity_cap.get((provider_id, model_id), route_limit),
-                    )
-                else:
-                    target_cap = parity_cap.get((provider_id, model_id), route_limit)
+                key = (provider_id, model_id)
+                declared_override = use_overrides and key in ROUTE_CAP_OVERRIDES
+                target_cap = route_target(
+                    provider_id,
+                    model_id,
+                    args.cap,
+                    parity_cap,
+                    use_overrides=use_overrides,
+                )
                 if args.apply:
                     if has_limit:
-                        new_entry, did_change = _clamp_context(entry, target_cap, native)
+                        if declared_override:
+                            new_entry, did_change = _set_context(entry, target_cap)
+                        else:
+                            new_entry, did_change = _clamp_context(entry, target_cap, native)
                         # kilo's compaction uses the input limit when it is
                         # present, so a block whose siblings set it sets it
                         # on every entry.
@@ -795,9 +873,9 @@ def main() -> int:
                             f"{rel}: {provider_id}/{model_id} sets no input limit although its "
                             "siblings do, and kilo's compaction reads the input limit when present"
                         )
-                    if ctx > target_cap:
+                    if not declared_override and ctx > target_cap:
                         problems.append(
-                            f"{rel}: {provider_id}/{model_id} context {ctx} exceeds the {target_cap} fleet cap"
+                            f"{rel}: {provider_id}/{model_id} context {ctx} exceeds its {target_cap} cap"
                         )
                     if native and native < ctx:
                         problems.append(
@@ -833,7 +911,14 @@ def main() -> int:
                     addition = []
                     for model_id in missing:
                         native = catalog[model_id]
-                        target = min(route_cap_for(provider_id, model_id), native)
+                        target = route_target(
+                            provider_id,
+                            model_id,
+                            args.cap,
+                            parity_cap,
+                            use_overrides=use_overrides,
+                            native=native,
+                        )
                         output = min(DEFAULT_OUTPUT, max(4096, native // 10))
                         addition.append(
                             _render_entry(model_id, names.get(model_id, model_id), target, output, style, indent)
@@ -858,9 +943,14 @@ def main() -> int:
                             shape = candidate
                     addition = []
                     for model_id in absent:
-                        target = min(
-                            route_cap_for(provider_id, model_id),
-                            catalog.get(model_id, args.cap),
+                        native = catalog.get(model_id)
+                        target = route_target(
+                            provider_id,
+                            model_id,
+                            args.cap,
+                            parity_cap,
+                            use_overrides=use_overrides,
+                            native=native,
                         )
                         limit = _shape_with_cap(shape, target) if shape else f'"limit": {{ "context": {target}, "output": {DEFAULT_OUTPUT} }}'
                         addition.append(f'{indent}"{model_id}": {{ {limit} }}')
@@ -894,7 +984,7 @@ def main() -> int:
                 m = re.search(r'"context"\s*:\s*(\d+)', entry)
                 target_cap = parity_cap.get(
                     (provider_id, model_id),
-                    route_cap_for(provider_id, model_id),
+                    route_cap(provider_id, model_id, args.cap, use_overrides=False),
                 )
                 if m:
                     if int(m.group(1)) > target_cap:
@@ -921,9 +1011,9 @@ def main() -> int:
 
     if not args.apply and catalog:
         for rel, _expected in FLEET_CONFIGS:
-            if not os.path.exists(rel):
+            text = config_texts.get(rel)
+            if text is None:
                 continue
-            text = open(rel, encoding="utf-8").read()
             span = provider_models_span(text, "llmgateway")
             if span is None:
                 continue
@@ -937,27 +1027,59 @@ def main() -> int:
                     f"{rel}: declares {model_id}, which the gateway no longer serves"
                 )
 
+    if not args.apply and use_overrides:
+        for (provider_id, model_id), cap in ROUTE_CAP_OVERRIDES.items():
+            for rel, expected_providers in FLEET_CONFIGS:
+                if provider_id not in expected_providers:
+                    continue
+                text = config_texts.get(rel)
+                if text is None:
+                    continue
+                actual = _model_limit(text, provider_id, model_id)
+                if actual is None:
+                    problems.append(
+                        f"{rel}: {provider_id}/{model_id} declares a {cap} override "
+                        "but has no limit.context"
+                    )
+                    continue
+                if actual != cap:
+                    problems.append(
+                        f"{rel}: {provider_id}/{model_id} context {actual} must be {cap} "
+                        "(declared override)"
+                    )
+                    continue
+                buffer_val = _compaction_buffer(text)
+                trigger = actual - buffer_val
+                if buffer_val and trigger != OVERRIDE_TRIGGER:
+                    problems.append(
+                        f"{rel}: {provider_id}/{model_id} compacts at {trigger} tokens "
+                        f"(context {actual} - buffer {buffer_val}), but the declared "
+                        f"override trigger is {OVERRIDE_TRIGGER}"
+                    )
+
     # the fleet cap lives in more than one script; they have to agree
     for rel in ("scripts/sync-pi-nanogpt.py",):
         if os.path.exists(rel):
             other = open(rel, encoding="utf-8").read()
             m = re.search(r'^CONTEXT_CAP\s*=\s*(\d+)', other, re.M)
-            if m and int(m.group(1)) != args.cap:
+            if not m:
+                problems.append(f"{rel}: no CONTEXT_CAP constant to compare against the fleet default")
+            elif int(m.group(1)) != FLEET_CAP:
                 problems.append(
-                    f"{rel}: CONTEXT_CAP is {m.group(1)} but the fleet cap is {args.cap}"
+                    f"{rel}: CONTEXT_CAP is {m.group(1)} but the fleet default is {FLEET_CAP}"
                 )
 
     if args.apply:
         if changed:
-            print(f"applied the fleet cap to {len(changed)} route(s):")
+            print(f"applied fleet context targets to {len(changed)} route(s):")
             for line in changed:
                 print(f"  {line}")
         else:
-            print("every route already carries a limit at or below its cap")
+            print("every route already carries a limit at or below its target cap")
         return 0
 
     if problems:
-        print(f"FAIL: {len(problems)} fleet route(s) exceed the allowed cap:", file=sys.stderr)
+        print(f"FAIL: {len(problems)} fleet context problem(s):", file=sys.stderr)
         for line in problems:
             print(f"  {line}", file=sys.stderr)
         return 1
@@ -967,7 +1089,7 @@ def main() -> int:
         for line in reports:
             print(f"  {line}")
 
-    if not explicit_cap and ROUTE_CAP_OVERRIDES:
+    if use_overrides and ROUTE_CAP_OVERRIDES:
         overrides = ", ".join(
             f"{provider_id}/{model_id} at {cap}"
             for (provider_id, model_id), cap in sorted(ROUTE_CAP_OVERRIDES.items())
