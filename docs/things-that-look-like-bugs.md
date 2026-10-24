@@ -396,3 +396,23 @@ caller.
 **When it becomes a real bug.** If the IP form is refused too, or if a client
 going through the forward sees this error. The second would mean something in
 the path is rewriting Host, which a raw TCP proxy cannot do.
+
+## `vivaldi-cdp start` refuses instead of launching
+
+**What you will observe.** `start` exits 1 without opening a browser in two
+cases. The port answers but no `vivaldi.exe` runs on the `Vivaldi-CDP` profile.
+Or the profile is already running while the port does not answer, usually
+because someone passed a different `--port` or `--profile`.
+
+**Why it is deliberate.** In the first case the listener is not ours: the daily
+browser started with `--remote-debugging-port`, or the container's forward with
+no browser behind it. Reporting that as "already answering" would send work to
+someone else's browser, and the matching `stop` would have nothing to kill. In
+the second case Vivaldi is single-instance per profile, so a second launch hands
+its URL to the running browser and exits without opening a new port. Launching
+anyway would spend the whole timeout and then blame a phantom port holder.
+
+**When it becomes a real bug.** If the profile is running and the port is open
+yet `start` still refuses, or if a Vivaldi release allows two instances on one
+profile. In the first case the PID match is wrong; check `vivaldi-cdp status`
+against Task Manager on Windows.
