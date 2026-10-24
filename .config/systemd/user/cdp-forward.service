@@ -1,0 +1,21 @@
+[Unit]
+Description=Forward Chrome DevTools Protocol to the Vivaldi on sisyphus
+Requires=cdp-forward.socket
+After=cdp-forward.socket
+
+# Socket-activated: nothing runs until a client connects, and it exits after
+# five idle minutes. The connection is forwarded raw, so the client's Host
+# header stays 127.0.0.1:9222, which Chromium accepts. (Dialing the MagicDNS
+# name directly is refused: "Host header is specified and is not an IP address
+# or localhost".) Start the browser first with `ssh sisyphus vivaldi-cdp start`;
+# with it down, a client connects and is immediately closed.
+#
+# The target is host:port, resolved by the proxy at connect time. Override it
+# with CDP_FORWARD_TARGET in $XDG_CONFIG_HOME/cdp-forward/env.
+
+[Service]
+Environment=CDP_FORWARD_TARGET=sisyphus.bass-procyon.ts.net:9222
+EnvironmentFile=-%E/cdp-forward/env
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=5min ${CDP_FORWARD_TARGET}
+PrivateTmp=yes
+NoNewPrivileges=yes

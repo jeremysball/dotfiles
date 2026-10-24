@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+# vivaldi-cdp: run a Vivaldi instance with the Chrome DevTools Protocol open,
+# on the Windows side of WSL2, so agents (chrome-devtools-mcp, playwright)
+# can drive a real browser.
+#
+#   vivaldi-cdp start    launch it if CDP is not already answering
+#   vivaldi-cdp stop     close only the instance this script launched
+#   vivaldi-cdp status   show CDP, process and tailnet state (exit 1 if CDP is down)
+#   vivaldi-cdp url      print the URL remote agents should use
+#
+# It runs on its own profile directory, never the daily one, so the browser
+# you actually use is not exposed to CDP and a running Vivaldi cannot
+# swallow the launch.
+#
+# Reach: CDP listens on Windows loopback only. WSL mirrored networking shares
+# that loopback with WSL, so 127.0.0.1:PORT works here. Other machines need
+# `tailscale serve --tcp PORT` to publish it tailnet-only (status says whether
+# that is set up), and they must use the tailnet IP, not the MagicDNS name:
+# Chromium rejects a Host header that is not an IP address or localhost.
+#
+# Settings, resolved flag > env var > config file > default:
+#   --port N        VIVALDI_CDP_PORT      port     9222
+#   --profile DIR   VIVALDI_CDP_PROFILE   profile  %LOCALAPPDATA%\Vivaldi-CDP
+#   --exe PATH      VIVALDI_CDP_EXE       exe      %LOCALAPPDATA%\Vivaldi\Application\vivaldi.exe
+#   --timeout SECS  VIVALDI_CDP_TIMEOUT   timeout  30
+# Config file: ${XDG_CONFIG_HOME:-~/.config}/vivaldi-cdp/config, one key=value per line.
+set -euo pipefail
+
+die() { echo "vivaldi-cdp: $*" >&2; exit 1; }
+usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; }
+
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/vivaldi-cdp/config"
+
+cfg_get() {
+  [[ -f $CONFIG_FILE ]] || return 0
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONFIG_FILE" | tail -n1
+}
+
+# resolve FLAG_VALUE ENV_NAME CONFIG_KEY DEFAULT
+resolve() {
+  local v=$1
+  [[ -n $v ]] && { echo "$v"; return; }
+  v=${!2:-}
+  [[ -n $v ]] && { echo "$v"; return; }
+  v=$(cfg_get "$3")
+  [[ -n $v ]] && { echo "$v"; return; }
+  echo "$4"
+}
+
+cmd="" f_port="" f_profile="" f_exe="" f_timeout=""
+while (($#)); do
+  case $1 in
+    --port) f_port=${2:?--port needs a value}; shift 2 ;;
+    --profile) f_profile=${2:?--profile needs a value}; shift 2 ;;
+    --exe) f_exe=${2:?--exe needs a value}; shift 2 ;;
+    --timeout) f_timeout=${2:?--timeout needs a value}; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    start|stop|status|url)
+      [[ -z $cmd ]] || die "one command at a time (got '$cmd' and '$1')"
+      cmd=$1; shift ;;
+    *) die "unknown argument: $1 (try --help)" ;;
+  esac
+done
+[[ -n $cmd ]] || { usage >&2; exit 2; }
+
+command -v jq >/dev/null 2>&1 || die "jq not found on PATH (needed to parse the CDP responses)"
+
+# Resolve the settings that need no Windows interop first so commands that do
+# not need the Windows side skip that block entirely: `url` needs only the
+# port and tailscale.exe, and `start` on an already-answering browser needs
+# only the port.
+PORT=$(resolve "$f_port" VIVALDI_CDP_PORT port 9222)
+TIMEOUT=$(resolve "$f_timeout" VIVALDI_CDP_TIMEOUT timeout 30)
+[[ $PORT =~ ^[0-9]+$ ]] || die "port must be a number, got '$PORT'"
+[[ $TIMEOUT =~ ^[0-9]+$ ]] || die "timeout must be a number, got '$TIMEOUT'"
+
+# Windows tools get /dev/null for stdin: run over `ssh host sh -s` they would
+# otherwise swallow the rest of the caller's script.
+# Run PowerShell source from stdin. The script is passed encoded so no quoting
+# survives a shell, and progress output is silenced. stderr is captured to a
+# temp file instead of merged into stdout: a diagnostic must never become
+# parsed data (a phantom "launch failed" or a broken PID list): its only
+# appearance is in the error message of the command that failed.
+psrun() {
+  local label=${1:?psrun needs a failure label} src err out rc=0
+  src="\$ErrorActionPreference='Stop'; \$ProgressPreference='SilentlyContinue'; $(cat)"
+  err=$(mktemp)
+  out=$( (cd "$WIN_CWD" && powershell.exe -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand \
+    "$(printf '%s' "$src" | iconv -f UTF-8 -t UTF-16LE | base64 -w0)" </dev/null) 2>"$err" | tr -d '\r' ) || rc=$?
+  if ((rc)); then
+    msg=$(tr -d '\r' <"$err")
+    rm -f "$err"
+    die "failed to $label: ${msg:-exit code $rc}"
+  fi
+  rm -f "$err"
+  printf '%s' "$out"
+}
+
+# PowerShell single-quoted literal: double any embedded single quote.
+pslit() { printf "'%s'" "${1//\'/\'\'}"; }
+
+probe() { curl -fsS --max-time "${1:-2}" "http://127.0.0.1:$PORT/json/version" 2>/dev/null; }
+
+# Probe for the interop pair before anything derives a Windows path: on a
+# non-WSL host the wslpath substitution would otherwise abort under set -e
+# before the friendly message could print.
+if ! command -v powershell.exe >/dev/null 2>&1 && ! command -v wslpath >/dev/null 2>&1; then
+  die "this script only runs inside WSL2: it needs windows interop (powershell.exe and wslpath), and neither is available"
+fi
+
+# A non-interactive ssh session gets a PATH without the Windows directories, and
+# that is exactly how a remote agent calls this script. Add the standard ones.
+# Tailscale is appended even when powershell.exe is already on PATH: a PATH
+# holding the Windows dirs but not its install dir silently loses tailscale.exe.
+if [[ $cmd == url ]]; then
+  # `url` does not need the Windows process side, only tailscale.exe.
+  command -v tailscale.exe >/dev/null 2>&1 || PATH="$PATH:$(wslpath -u 'C:\Program Files\Tailscale')"
+else
+  # cmd.exe refuses a UNC working directory (which is what a WSL cwd looks like
+  # to Windows), so run every Windows tool from the C: drive root.
+  WIN_CWD=$(wslpath -u 'C:\')
+  for d in Windows/System32 Windows/System32/WindowsPowerShell/v1.0 'Program Files/Tailscale'; do
+    PATH="$PATH:$WIN_CWD/$d"
+  done
+  command -v powershell.exe >/dev/null 2>&1 || die "powershell.exe not found on PATH or in C:\\Windows\\System32 (is WSL interop disabled?)"
+  LOCALAPPDATA_WIN=$(cd "$WIN_CWD" && cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null </dev/null | tr -d '\r')
+  [[ $LOCALAPPDATA_WIN =~ ^[A-Za-z]:\\ ]] || die "could not read %LOCALAPPDATA% from Windows (got '$LOCALAPPDATA_WIN')"
+  PROFILE=$(resolve "$f_profile" VIVALDI_CDP_PROFILE profile "$LOCALAPPDATA_WIN\\Vivaldi-CDP")
+  EXE=$(resolve "$f_exe" VIVALDI_CDP_EXE exe "$LOCALAPPDATA_WIN\\Vivaldi\\Application\\vivaldi.exe")
+fi
+
+# Prints the PID of each main (non --type=) Vivaldi process whose exact
+# --user-data-dir argument value is our profile. Matching the argument's value
+# for equality (not an unanchored substring) keeps a sibling profile such as
+# ...Vivaldi-CDP-test from matching, and being taskkilled, by cmd_stop.
+profile_pids() {
+  { printf '$prof = %s; ' "$(pslit "$PROFILE")"; cat <<'PS'
+Get-CimInstance Win32_Process -Filter "Name='vivaldi.exe'" |
+  Where-Object {
+    $c = [string]$_.CommandLine
+    $m = [regex]::Match($c, '(?i)--user-data-dir=(?:"(?<v>[^"]*)"|(?<v>[^\s]+))')
+    $m.Success -and $m.Groups['v'].Value.Trim('"') -eq $prof -and $c -notlike '*--type=*'
+  } | ForEach-Object { $_.ProcessId }
+PS
+  } | psrun "list Vivaldi processes on $PROFILE"
+}
+
+cmd_start() {
+  local v out pids
+  # Whatever answers the port must be this profile's browser. A foreign CDP
+  # listener (the daily browser started with --remote-debugging-port, or a
+  # local forward) would otherwise be reported as ready while this profile has
+  # no browser at all, and the matching `stop` would have nothing to stop.
+  if v=$(probe); then
+    pids=$(profile_pids)
+    [[ -n $pids ]] || die "CDP answers on 127.0.0.1:$PORT but no Vivaldi process is running on profile $PROFILE; something else holds the port"
+    echo "already answering on 127.0.0.1:$PORT ($(jq -r .Browser <<<"$v"))"
+    return 0
+  fi
+  # Vivaldi is single-instance per profile: a second process hands the URL to
+  # the running one and exits, so it can never open a new debug port. Say that
+  # instead of burning the timeout and blaming a phantom port holder.
+  pids=$(profile_pids)
+  [[ -z $pids ]] || die "profile $PROFILE is already running (pid $(tr '\n' ' ' <<<"$pids")); run 'vivaldi-cdp stop' before changing the port or profile settings"
+  out=$({ printf '$exe = %s; $prof = %s; $port = %s; ' "$(pslit "$EXE")" "$(pslit "$PROFILE")" "$PORT"; cat <<'PS'
+if (-not (Test-Path -LiteralPath $exe)) { 'MISSING-EXE' }
+else {
+  Start-Process -FilePath $exe -ArgumentList @(
+    "--remote-debugging-port=$port",
+    "--user-data-dir=`"$prof`"",
+    '--no-first-run', '--no-default-browser-check', 'about:blank')
+}
+PS
+  } | psrun "launch Vivaldi")
+  [[ $out != *MISSING-EXE* ]] || die "Vivaldi not found at $EXE (set --exe or VIVALDI_CDP_EXE)"
+  [[ -z $out ]] || die "launch failed: $out"
+  # Wall-clock deadline: the TIMEOUT budget counts from the launch, not per
+  # iteration, and each curl probe gets only the remaining seconds.
+  local start=$SECONDS elapsed budget
+  while :; do
+    elapsed=$((SECONDS - start))
+    ((elapsed < TIMEOUT)) || break
+    budget=$((TIMEOUT - elapsed))
+    if v=$(probe "$budget"); then
+      echo "started: 127.0.0.1:$PORT ($(jq -r .Browser <<<"$v")) after ${elapsed}s, profile $PROFILE"
+      return 0
+    fi
+    ((SECONDS - start < TIMEOUT)) && sleep 1
+  done
+  die "launched Vivaldi but CDP did not answer on 127.0.0.1:$PORT within ${TIMEOUT}s (is another process holding the port?)"
+}
+
+cmd_stop() {
+  local pids
+  pids=$(profile_pids)
+  if [[ -z $pids ]]; then
+    echo "no Vivaldi instance on profile $PROFILE"
+    probe >/dev/null && echo "note: CDP still answers on 127.0.0.1:$PORT from a process this script did not start" >&2
+    return 0
+  fi
+  # Force-kill the process tree. A polite CloseMainWindow() returns True but
+  # leaves this Vivaldi running (checked against 8.2.4133.94), so it only adds a
+  # 10s wait. taskkill runs under cmd.exe because PowerShell 5.1 turns a native
+  # command's stderr into a terminating error.
+  { printf '$ids = @(%s); ' "$(tr '\n' ',' <<<"$pids" | sed 's/,$//')"; cat <<'PS'
+foreach ($id in $ids) { cmd.exe /c "taskkill /PID $id /T /F >nul 2>&1" }
+$deadline = (Get-Date).AddSeconds(5)
+while ((Get-Date) -lt $deadline -and (Get-Process -Id $ids -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 200 }
+PS
+  } | psrun
+  probe >/dev/null && die "stopped the instance but CDP still answers on 127.0.0.1:$PORT (another process holds it)"
+  echo "stopped"
+}
+
+cmd_status() {
+  local v pids serve serve_json ip rc=0
+  echo "port      $PORT"
+  echo "profile   $PROFILE"
+  if v=$(probe); then
+    echo "cdp       up: $(jq -r .Browser <<<"$v"), $(curl -fsS --max-time 2 "http://127.0.0.1:$PORT/json/list" | jq length) targets"
+  else
+    echo "cdp       down"; rc=1
+  fi
+  pids=$(profile_pids | tr '\n' ' ')
+  echo "process   ${pids:-none on this profile}"
+  if command -v tailscale.exe >/dev/null 2>&1; then
+    ip=$(tailscale.exe ip -4 </dev/null | tr -d '\r' | head -n1)
+    # Prefer the JSON status: an exact key lookup for the port proves the port
+    # is a *listen* port and cannot confuse it with :92220 or a rule whose
+    # proxy target merely mentions the port. Fall back to plain text, where the
+    # port must be followed by something that is not a digit.
+    if serve_json=$(tailscale.exe serve status --json 2>/dev/null </dev/null) && [[ -n $serve_json ]]; then
+      if jq -e --arg p "$PORT" '(.TCP // {}) | has($p)' <<<"$serve_json" >/dev/null; then
+        echo "tailnet   published: http://$ip:$PORT"
+      else
+        echo "tailnet   not published (run on Windows: tailscale serve --bg --tcp $PORT tcp://localhost:$PORT)"
+      fi
+    elif ! serve=$(tailscale.exe serve status 2>&1 </dev/null); then
+      echo "tailnet   unknown (tailscale.exe serve status failed: ${serve//$'\r'/})"
+    elif [[ $serve =~ :$PORT([^0-9]|$) ]]; then
+      echo "tailnet   published: http://$ip:$PORT"
+    else
+      echo "tailnet   not published (run on Windows: tailscale serve --bg --tcp $PORT tcp://localhost:$PORT)"
+    fi
+  fi
+  return $rc
+}
+
+cmd_url() {
+  command -v tailscale.exe >/dev/null || die "tailscale.exe is not on PATH"
+  local ip
+  ip=$(tailscale.exe ip -4 2>/dev/null </dev/null | tr -d '\r' | head -n1)
+  [[ -n $ip ]] || die "tailscale reports no IPv4 address"
+  echo "http://$ip:$PORT"
+}
+
+"cmd_$cmd"

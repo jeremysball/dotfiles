@@ -326,3 +326,93 @@ four paths exist (the daemon was not restarted after an edit, or an entry no
 longer resolves), if the warning names a path outside `~/.claude` such as
 `~/.ssh`, which would be an accidental exposure, or if taskferry gains `~`
 expansion or a startup check and this entry still says otherwise.
+
+## `vivaldi-cdp stop` force-kills the browser
+
+**What you will observe.** `vivaldi-cdp stop` ends the instance with
+`taskkill /T /F`. It never asks the window to close first, so Vivaldi gets no
+chance to write out its state.
+
+**Why it is deliberate.** The polite route does not work here. On Vivaldi
+8.2.4133.94, `CloseMainWindow()` returned True and the browser was still
+running four seconds later, on a fresh instance with one blank tab. Keeping the
+call only added a ten second wait before the kill. The instance uses its own
+`Vivaldi-CDP` profile, kept for automation, so a hard stop costs that profile's
+open tabs and nothing from the daily browser.
+
+**When it becomes a real bug.** If a later Vivaldi closes on
+`CloseMainWindow()`, close first and kill only on timeout. Also if something
+worth keeping, such as a login set up by hand, ends up in the `Vivaldi-CDP`
+profile and a hard stop damages it.
+
+## The debug port is open to the whole tailnet with no login
+
+**What you will observe.** From any machine on the tailnet,
+`http://<sisyphus tailnet IP>:9222/json/version` answers, and the websocket URL
+it returns lets the caller open pages, read them, and run script in the
+browser. Nothing asks for a credential.
+
+**Why it is deliberate.** CDP has no authentication, and remote agents need
+exactly this access. Two things bound it. The browser runs on the separate,
+empty `Vivaldi-CDP` profile, not the daily one. And the Tailscale rule is a
+`serve` rule (tailnet only), not `funnel` (public). `vivaldi-cdp` does not
+create that rule: `status` reports whether it exists and prints the command to
+add it.
+
+**When it becomes a real bug.** If the daily profile is ever started with
+`--remote-debugging-port`, if a `funnel` rule ever points at the port, or if a
+node you do not control joins the tailnet with no ACL limiting port 9222.
+
+## A stopped browser gives "empty reply", not "connection refused"
+
+**What you will observe.** With Vivaldi stopped, `curl
+http://127.0.0.1:9222/json/version` on the container fails with `Empty reply
+from server` (curl exit 52). Aimed straight at the tailnet address it fails with
+`Connection reset by peer` (exit 56). Neither says "refused", so it can look
+like the forward is broken.
+
+**Why it is deliberate.** Both hops accept the connection first and only then
+try the next one. `cdp-forward.socket` is socket-activated, so the container
+accepts before `systemd-socket-proxyd` dials upstream. The Tailscale `serve`
+rule accepts on the tailnet address and then fails to reach `localhost:9222`.
+Either symptom clears with `ssh sisyphus vivaldi-cdp start`.
+
+**When it becomes a real bug.** If the same error appears while
+`vivaldi-cdp status` says the browser is up. That points at the forward, the
+serve rule, or the Windows loopback.
+
+## The browser rejects the MagicDNS name
+
+**What you will observe.** `curl http://sisyphus.bass-procyon.ts.net:9222/json/version`
+fails with `Host header is specified and is not an IP address or localhost`,
+while the tailnet IP on the same port answers.
+
+**Why it is deliberate.** Chromium applies that check to the Host header
+itself, and the script does not try to change it. The container's forward gets
+around it by being a raw TCP proxy: it dials the MagicDNS name, but the client's
+`Host: 127.0.0.1:9222` passes through untouched, so the browser sees a local
+caller.
+
+**When it becomes a real bug.** If the IP form is refused too, or if a client
+going through the forward sees this error. The second would mean something in
+the path is rewriting Host, which a raw TCP proxy cannot do.
+
+## `vivaldi-cdp start` refuses instead of launching
+
+**What you will observe.** `start` exits 1 without opening a browser in two
+cases. The port answers but no `vivaldi.exe` runs on the `Vivaldi-CDP` profile.
+Or the profile is already running while the port does not answer, usually
+because someone passed a different `--port` or `--profile`.
+
+**Why it is deliberate.** In the first case the listener is not ours: the daily
+browser started with `--remote-debugging-port`, or the container's forward with
+no browser behind it. Reporting that as "already answering" would send work to
+someone else's browser, and the matching `stop` would have nothing to kill. In
+the second case Vivaldi is single-instance per profile, so a second launch hands
+its URL to the running browser and exits without opening a new port. Launching
+anyway would spend the whole timeout and then blame a phantom port holder.
+
+**When it becomes a real bug.** If the profile is running and the port is open
+yet `start` still refuses, or if a Vivaldi release allows two instances on one
+profile. In the first case the PID match is wrong; check `vivaldi-cdp status`
+against Task Manager on Windows.
