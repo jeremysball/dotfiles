@@ -1127,6 +1127,9 @@
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "Authorization": "Bearer {file:~/.config/context7/api-key}"
+      },
       "enabled": true
     },
     "taskferry": {

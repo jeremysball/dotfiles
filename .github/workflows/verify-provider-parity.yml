@@ -33,6 +33,9 @@ jobs:
           opencode --version 2>&1 | head -5
       - name: Install dotfiles config to harness locations
         run: |
+          install -d -m 700 ~/.config/context7
+          install -m 600 /dev/null ~/.config/context7/api-key
+          printf '%s\n' 'ci-placeholder' > ~/.config/context7/api-key
           mkdir -p ~/.config/opencode
           cp .config/opencode/opencode.jsonc ~/.config/opencode/opencode.jsonc 2>/dev/null || true
           cp .config/opencode/opencode.json ~/.config/opencode/opencode.json 2>/dev/null || true
