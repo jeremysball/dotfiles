@@ -8,13 +8,13 @@ auto_switch = false
 default_shell = "/usr/sbin/fish"
 
 [ui.toast]
-delivery = "terminal"
+delivery = "system"
 
 [ui]
 show_agent_labels_on_pane_borders = true
 agent_panel_sort = "spaces"
 
-status_indicators = "symbols"
+status_indicators = "dots"
 [ui.sound]
 enabled = true
 
