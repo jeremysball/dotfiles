@@ -122,10 +122,12 @@ ast-grep = "0.44.1"
 herdr = "latest"
 java = "temurin-21.0.12+8.0.LTS"
 crush = "latest"
-# Pinned by tag, not semver range: mise's minimum_release_age hides the
-# newest oh-my-pi releases until they age out, so "latest" can resolve to an
-# older version than the tags publish. 18.14.0 is the newest visible tag.
-"github:can1357/oh-my-pi" = "18.14.0"
+# Pinned by tag, not semver range: mise's built-in 24h minimum_release_age
+# hold-back (a default, not a setting in this file) hides releases younger
+# than a day, so plain "latest" can sit behind the newest published tag.
+# 18.14.1 is the newest tag past the hold-back; 18.14.2 is still hidden
+# as of 2026-11-01 and needs a manual bump once it ages out.
+"github:can1357/oh-my-pi" = "18.14.1"
 
 # Empryo installs to ~/.empryo/bin via its upstream installer (sha256-verified
 # against the signed SHA256SUMS). mise doesn't manage it: the upstream repo
