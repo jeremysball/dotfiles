@@ -3,6 +3,10 @@
     "playwright-mcp": {
       "command": "npx",
       "args": ["-y", "@playwright/mcp@0.0.83", "--config", "${HOME}/.config/playwright-mcp/config.json"]
+    },
+    "arxiv": {
+      "command": "npx",
+      "args": ["-y", "@cyanheads/arxiv-mcp-server@1.8.1"]
     }
   }
 }
