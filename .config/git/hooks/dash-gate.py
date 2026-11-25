@@ -27,12 +27,12 @@ Fish has no built-in ast-grep grammar. tree-sitter-fish is compiled from a
 pinned commit the first time a fish file is staged, into the XDG cache. If
 that build fails, the gate exits 2 rather than silently falling back.
 
-ast-grep 0.51 and later skip a custom language library unless the scan is
-given `--custom-languages allow`, and then fail to parse any rule naming that
+ast-grep 0.51.3 skips a custom language library unless the scan is given
+`--custom-languages allow`, and then fails to parse any rule naming that
 language. The gate passes the flag on scans that include fish when
-`ast-grep scan --help` lists it; older ast-grep has no such flag and loads the
-library unasked. The library allowed is the one resolved below, named in the
-throwaway sgconfig.yml the gate writes for each scan.
+`ast-grep scan --help` lists it. 0.44.1, the previous pin, has no such flag and
+loads the library unasked. The library allowed is the one resolved below,
+named in the throwaway sgconfig.yml the gate writes for each scan.
 
 Fish parser location, highest precedence first:
   --fish-parser PATH              flag
