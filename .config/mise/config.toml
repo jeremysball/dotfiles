@@ -93,8 +93,8 @@ cowsay = "latest"
 # fail. Mise pulls the prebuilt binary from GitHub releases (Jguer/yay) with
 # no build step, matching how other prebuilt tools are managed here.
 "github:Jguer/yay" = "latest"
-rust = "1.91"
-ast-grep = "0.44.1"
+rust = "1.100"
+ast-grep = "0.51.3"
 "pipx:huggingface_hub" = "latest"
 
 # colabctl was a stray `pip install` into the shared python@latest venv,
@@ -120,14 +120,14 @@ ast-grep = "0.44.1"
 # same `KernelClient` rename break on its own `colab exec`/kernel commands.
 "pipx:google-colab-cli" = { version = "latest", uvx_args = "--with jupyter-kernel-client==0.9.0" }
 herdr = "latest"
-java = "temurin-21.0.12+8.0.LTS"
+java = "temurin-21.0.13.1+2.0.LTS"
 crush = "latest"
 # Pinned by tag, not semver range: mise's built-in 24h minimum_release_age
 # hold-back (a default, not a setting in this file) hides releases younger
 # than a day, so plain "latest" can sit behind the newest published tag.
-# 18.14.1 is the newest tag past the hold-back; 18.14.2 is still hidden
-# as of 2026-11-01 and needs a manual bump once it ages out.
-"github:can1357/oh-my-pi" = "18.14.1"
+# 19.1.1 is the newest tag past the hold-back as of 2026-11-25; 19.2.x is
+# still hidden and needs a manual bump once it ages out.
+"github:can1357/oh-my-pi" = "19.1.1"
 
 # Empryo installs to ~/.empryo/bin via its upstream installer (sha256-verified
 # against the signed SHA256SUMS). mise doesn't manage it: the upstream repo

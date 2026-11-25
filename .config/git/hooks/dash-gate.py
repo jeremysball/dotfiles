@@ -27,6 +27,13 @@ Fish has no built-in ast-grep grammar. tree-sitter-fish is compiled from a
 pinned commit the first time a fish file is staged, into the XDG cache. If
 that build fails, the gate exits 2 rather than silently falling back.
 
+ast-grep 0.51.3 skips a custom language library unless the scan is given
+`--custom-languages allow`, and then fails to parse any rule naming that
+language. The gate passes the flag on scans that include fish when
+`ast-grep scan --help` lists it. 0.44.1, the previous pin, has no such flag and
+loads the library unasked. The library allowed is the one resolved below,
+named in the throwaway sgconfig.yml the gate writes for each scan.
+
 Fish parser location, highest precedence first:
   --fish-parser PATH              flag
   DASH_GATE_FISH_PARSER=PATH      env var
@@ -295,6 +302,14 @@ def build_fish_parser(dest):
         shutil.rmtree(src, ignore_errors=True)
 
 
+def custom_languages_flag_supported():
+    done = subprocess.run(["ast-grep", "scan", "--help"], capture_output=True)
+    if done.returncode != 0:
+        raise GateError("ast-grep scan --help failed (exit %d): %s"
+                        % (done.returncode, decode(done.stderr).strip()))
+    return b"--custom-languages" in done.stdout
+
+
 def comment_text(code_files, fish_parser_flag):
     """{path: {lineno: comment text on that line}} via one ast-grep scan.
 
@@ -324,9 +339,11 @@ def comment_text(code_files, fish_parser_flag):
             with open(name, "w", encoding="utf-8", errors="surrogateescape") as fh:
                 fh.write(text)
             names[name] = path
+        allow = (["--custom-languages", "allow"]
+                 if "fish" in langs and custom_languages_flag_supported() else [])
         done = subprocess.run(
-            ["ast-grep", "scan", "-c", cfg, "--inline-rules", "\n---\n".join(rules),
-             "--json=compact", *names],
+            ["ast-grep", "scan", "-c", cfg, *allow, "--inline-rules",
+             "\n---\n".join(rules), "--json=compact", *names],
             cwd=work, capture_output=True)
         try:
             matches = json.loads(decode(done.stdout))

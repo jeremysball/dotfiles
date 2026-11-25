@@ -210,6 +210,9 @@ def stage_and_run(line, locale, name="f.txt"):
         done = subprocess.run(
             ["bash", HOOK], cwd=work, env=env, capture_output=True, text=True
         )
+        if done.returncode not in (0, 1):
+            print("hook exit %d for %s\n%s" % (done.returncode, name, done.stderr),
+                  file=sys.stderr)
         return done.returncode
     finally:
         shutil.rmtree(work, ignore_errors=True)

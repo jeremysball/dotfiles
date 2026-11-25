@@ -147,6 +147,30 @@ set `DASH_GATE_FISH_PARSER` or `git config dashgate.fishParser` to its path.
 **When it becomes a real bug.** If the build runs on every fish commit instead
 of once, or if a failed build lets the commit through.
 
+## The dash gate tells ast-grep to load a native library
+
+**What you will observe.** When a staged file is fish,
+`.config/git/hooks/dash-gate.py` adds `--custom-languages allow` to its
+`ast-grep scan`, and only then. Without the flag, ast-grep 0.51.3 warns that
+native libraries can execute malicious code, skips the library, and fails to
+parse the fish rule.
+
+**Why it is deliberate.** Fish is a custom language here, so the comment rule
+cannot parse unless ast-grep loads the tree-sitter-fish library. The library is
+the one the gate resolved itself (the flag, `DASH_GATE_FISH_PARSER`,
+`dashgate.fishParser`, or the pinned build in the XDG cache), named in a
+`sgconfig.yml` the gate writes to a throwaway directory. The scan reads no
+config file from the staged tree. ast-grep 0.44.1, the previous pin, loaded
+that library unasked, so the flag restores the earlier behavior and adds no
+capability. The gate looks for `--custom-languages` in `ast-grep scan --help`
+first, because 0.44.1 has no such flag.
+
+**When it becomes a real bug.** If the flag goes onto a scan with no fish file,
+or the library path can come from anywhere but the sources above. Also if
+`python3 scripts/check-dash-gate.py` passes on ast-grep 0.51.3 with the flag
+removed: its fish cases fail without it, so a pass means they stopped
+exercising fish.
+
 ## commit-msg lets non-Conventional subjects through in a password store
 
 **What you will observe.** `~/.config/git/hooks/commit-msg` rejects any subject
