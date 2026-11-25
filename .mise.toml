@@ -18,7 +18,7 @@ run = "bats tests"
 # check-git-hooks runs both.
 [tasks.check-dash-gate]
 description = "Run the pre-commit dash gate's block/pass matrix (scripts/check-dash-gate.py)"
-tools = { ast-grep = "0.44.1" }
+tools = { ast-grep = "0.51.3" }
 run = "python3 scripts/check-dash-gate.py"
 
 [tasks.check-fleet-context-cap]
@@ -31,7 +31,7 @@ run = "python3 scripts/check-mcp-parity.py"
 
 [tasks.check-hook-knobs]
 description = "Assert the hooks honor no bypass knob and advertise none (scripts/check-hook-knobs.py)"
-tools = { ast-grep = "0.44.1" }
+tools = { ast-grep = "0.51.3" }
 run = "python3 scripts/check-hook-knobs.py"
 
 [tasks.check-git-hooks]
