@@ -17,6 +17,10 @@
 #   2. run the repo's own hook, moved aside to .githooks/<hook>.local
 # A contributor without dotfiles skips step 1 and still gets step 2.
 #
+# The shim requires `realpath` and fails closed: an unresolvable path aborts
+# the hook instead of silently skipping a gate. Re-run this script to replace
+# a v2 shim, which fell back to the unresolved path.
+#
 # GIT_HOOKS_CHAINED guards against a loop: the global pre-commit chains
 # down to .githooks/<hook> itself, and would otherwise re-enter the shim.
 #
@@ -36,7 +40,7 @@ is_shim() { [ -f "$1" ] && grep -qE "$SHIM_MARKER_RE" "$1" 2>/dev/null; }
 write_shim() {
   cat > "$1" <<'SHIMEOF'
 #!/usr/bin/env bash
-# install-githooks-shim: v2
+# install-githooks-shim: v3
 # Managed by `mise run install-githooks`. Do not edit.
 # Repo-specific checks belong in the .local file this dispatches to.
 set -euo pipefail
@@ -51,7 +55,7 @@ hook_name="$(basename "$0")"
 # global pre-push exited 0.
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 global_hook="${XDG_CONFIG_HOME:-$HOME/.config}/git/hooks/$hook_name"
-self_path="$(realpath "$0" 2>/dev/null || echo "$0")"
+self_path="$(realpath "$0")"
 
 # 1. global gates (em dash, worktree budget, ...), when dotfiles are applied.
 #    Skipped when the global hook is what invoked us, so we do not loop.
@@ -61,7 +65,7 @@ fi
 
 # 2. this repo's own checks, if it has any.
 #
-# The realpath self-check matches the one in the global hooks, and for the
+# The self-check is the same comparison the global hooks make, and for the
 # same reason: a candidate that resolves back to this file re-enters the shim
 # with the same $0 basename, so nothing ever terminates. Verified 2026-09-03
 # on a scratch repo whose `hooks/pre-commit` symlinked to `.githooks/pre-commit`
@@ -69,12 +73,18 @@ fi
 # self-limiting by accident, since re-entry through it changes the basename to
 # `pre-commit.local` and the second pass finds nothing; the `hooks/` path has
 # no such accident, and relying on one either way is not a guard.)
+#
+# It differs from the global hooks in one way: it fails closed. The `[ -f ]`
+# guard above already established the candidate exists, so a resolution error
+# here is a real error and aborts the hook. The global hooks resolve first and
+# gate on `[ -n ... ]`, because for them an unresolvable path is the ordinary
+# "repo has no hook of this name" case. Do not copy this form there.
 local_hook="$repo_root/.githooks/$hook_name.local"
 alt_hook="$repo_root/hooks/$hook_name"
 for candidate in "$local_hook" "$alt_hook"; do
   [ -f "$candidate" ] || continue
-  candidate_real="$(realpath "$candidate" 2>/dev/null || echo "")"
-  [ -n "$candidate_real" ] && [ "$candidate_real" != "$self_path" ] || continue
+  candidate_real="$(realpath "$candidate")"
+  [ "$candidate_real" != "$self_path" ] || continue
   # GIT_HOOKS_CHAINED propagates down, matching the exec block at the end of
   # pre-commit and pre-push:198. Not a bug fix: measured 2026-09-03, a .local
   # that is itself a shim copy already runs the global gates once either way,
