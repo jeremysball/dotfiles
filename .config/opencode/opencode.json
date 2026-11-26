@@ -1,4 +1,8 @@
 {
+  "tool_output": {
+    "max_lines": 200,
+    "max_bytes": 8192
+  },
   "$schema": "https://opencode.ai/config.json",
   "model": "llmgateway/mimo-v2.6-pro",
   "agent": {
