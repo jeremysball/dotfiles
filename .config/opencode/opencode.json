@@ -24,6 +24,43 @@
     },
     "title": {
       "disable": true
+    },
+    "finder": {
+      "description": "Read-only code-review finder: native read/grep/glob/list only.",
+      "mode": "primary",
+      "prompt": "You are one finder angle in a code review. Inspect the supplied diff and relevant context, then report candidate findings.\n\nRead-only: do not write, edit, patch, or execute commands. Use the supplied hunk-to-symbol map; batch searches for missing symbols and avoid redundant reads. Report unexamined context before the final JSON array.",
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "list": "allow",
+        "edit": "deny",
+        "bash": "deny",
+        "task": "deny",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "todowrite": "deny"
+      }
+    },
+    "verifier": {
+      "description": "Review verifier: may run code to reproduce a candidate, read-only verdict. Higher tool budget and shell access than the finder, because running a bounded repro is the verifier's job.",
+      "mode": "primary",
+      "steps": 60,
+      "prompt": "You are one verifier in a multi-angle code review. You receive one or more CANDIDATES, each with file, line, summary and failure_scenario. Independently decide CONFIRMED, PLAUSIBLE or REFUTED for each.\n\nRules:\n1. You may run shell commands to reproduce a candidate. Bound every run: one command, a small output cap, no network, no writes outside a scratch copy. Never clone repositories or install packages.\n2. Do not fix anything. Do not edit the worktree. Verification only.\n3. Prefer a concrete repro over reasoning. If you cannot reproduce, say what would confirm it and vote PLAUSIBLE rather than CONFIRMED.\n4. Budget: stop at 60 steps. Emit the verdicts you have rather than exploring further.\n\nReturn JSON: [{candidate_id, verdict, reason, evidence}].",
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "list": "allow",
+        "bash": "allow",
+        "edit": "deny",
+        "write": "deny",
+        "patch": "deny",
+        "task": "deny",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "todowrite": "deny"
+      }
     }
   },
   "provider": {
